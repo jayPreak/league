@@ -25,6 +25,7 @@
         <span class="blue" id="killsB">0</span>
         <span id="clock">00:00</span>
         <span class="red" id="killsR">0</span>
+        <button id="mute" title="Toggle sound (M)" aria-pressed="false">Sound: On</button>
       </div>
       <div id="scoreline"></div>
       <div id="feed"></div>
@@ -79,7 +80,10 @@
       <div id="champs"></div>
       <div id="diff"></div>
       <button id="play" disabled>Pick a champion</button>
-      <button id="motion" aria-pressed="false">Reduced motion: Off</button>
+      <div class="toggles">
+        <button id="motion" aria-pressed="false">Reduced motion: Off</button>
+        <button id="mmute" aria-pressed="false">Sound: On</button>
+      </div>
       <div class="controls mob">
         <div><b>Left thumb</b> drag anywhere to move</div>
         <div><b>Attack</b> hits the nearest enemy (champions first) · <b>Minion</b> / <b>Turret</b> pick that target</div>
@@ -90,7 +94,7 @@
         <div><b>Right / Left click</b> move &amp; attack (hold to keep moving)</div>
         <div><b>Q W E R</b> abilities at cursor (R unlocks at level 6)</div>
         <div><b>D</b> Flash · <b>F</b> Heal · <b>B</b> Recall · <b>S</b> Stop</div>
-        <div><b>P</b> Shop (in fountain) · <b>Y</b> camera lock · <b>Space</b> center · <b>wheel</b> zoom</div>
+        <div><b>P</b> Shop (in fountain) · <b>M</b> mute · <b>Y</b> camera lock · <b>Space</b> center · <b>wheel</b> zoom</div>
       </div>
     </div>
 

@@ -8,7 +8,7 @@ This is an original game: the champions, abilities, items, art and code are all 
 
 - **Right or left click**: move or attack (hold to keep moving)
 - **Q W E R**: abilities, cast at the cursor (R unlocks at level 6)
-- **D** Flash · **F** Heal · **B** Recall · **S** Stop
+- **D** Flash · **F** Heal · **B** Recall · **S** Stop · **M** mute
 - **P**: shop (in your fountain only) · **Y**: camera lock · **Space**: center camera · **wheel**: zoom
 - Minimap: click to move (or pan when the camera is unlocked)
 
@@ -45,3 +45,7 @@ Effects follow a small set of rules (see `src/fx.ts`):
 - **Reduced motion**: follows the OS setting and can be toggled on the menu; it removes shake, hit-stop and slow motion, halves particles and drops UI movement while keeping the information.
 
 A live all-bot match plays behind the main menu.
+
+## Sound
+
+All sound is synthesized at runtime with the Web Audio API (`src/audio.ts`); there are no audio files. Each effect is built from a pitched oscillator and filtered noise, with slight random pitch so repeats don't drone. World sounds are panned and faded by their position relative to the camera, each sound has a minimum replay gap, and the total number of voices is capped. The bot match behind the menu stays silent. Toggle sound with **M** or the Sound button (remembered in the browser).

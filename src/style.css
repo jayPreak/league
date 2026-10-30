@@ -1216,3 +1216,40 @@ body.reduce #announce.run b {
 #shopbtn {
   white-space: nowrap;
 }
+
+.toggles {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation-delay: 390ms !important;
+}
+#mmute {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #9aa3ad;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  transition: transform 140ms var(--ease-out);
+}
+#mmute:active,
+#mute:active {
+  transform: scale(0.97);
+}
+#mute {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #9aa3ad;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  align-self: center;
+  transition: transform 140ms var(--ease-out);
+}
+#mute[aria-pressed='true'],
+#mmute[aria-pressed='true'] {
+  color: #ff8a8a;
+  border-color: rgba(255, 120, 120, 0.4);
+}

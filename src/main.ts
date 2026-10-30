@@ -32,6 +32,7 @@ import {
   updateParticles,
   updateShake,
 } from './fx';
+import { audio, setMuted, sfx } from './audio';
 import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Team, Vec } from './data';
 
 // ================= types =================
@@ -495,6 +496,7 @@ function announce(text: string, tone: 'good' | 'bad' | 'neutral', sub = '') {
   if (!running) return;
   const el = $('announce');
   el.className = `show ${tone}`;
+  if (tone !== 'neutral') sfx(tone);
   el.innerHTML = `<b>${text}</b>${sub ? `<small>${sub}</small>` : ''}`;
   void el.offsetWidth; // restart the one-shot animation
   el.classList.add('run');
@@ -511,7 +513,12 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType): number {
   t.hp -= dmg;
   t.hitFlash = 0.12;
   if (t.kind === 'champ' || t.kind === 'minion') t.pop = Math.min(1, t.pop + (dmg > 40 ? 1 : 0.6));
-  if (dmg > 4) hitSparks(src, t, type);
+  if (dmg > 4) {
+    hitSparks(src, t, type);
+    const mine = src === G.player || t === G.player;
+    if (t.kind === 'champ' && (mine || src.kind === 'champ')) sfx(dmg > 60 ? 'hitHeavy' : 'hit', t, mine ? 1 : 0.6);
+    else if (mine && src.kind !== 'nexus') sfx('hit', t, 0.45);
+  }
   if (t === G.player && dmg > t.maxHp * 0.06) {
     hurt = Math.min(1, hurt + 0.6);
     addTrauma(0.16);
@@ -559,6 +566,7 @@ function gainXp(u: Unit, amt: number) {
       pt.classList.remove('lvlup');
       void pt.offsetWidth;
       pt.classList.add('lvlup');
+      sfx('levelUp');
       addText(u.x, u.y - 60, `LEVEL ${c.level}`, '#ffe27a', 20);
       if (c.level === 6) feedMsg('Ultimate unlocked! Press R.', -1);
     }
@@ -573,6 +581,10 @@ function giveGold(u: Unit, amt: number) {
 }
 
 function deathFx(t: Unit) {
+  if (t.kind === 'minion') sfx('minionDie', t, 0.5);
+  else if (t.kind === 'champ') sfx('champDie', t);
+  else if (t.kind === 'tower') sfx('towerDie', t);
+  else sfx('nexus');
   if (!onScreen(t)) return;
   const col = TEAM_COLOR[t.team];
   if (t.kind === 'minion') {
@@ -610,6 +622,7 @@ function kill(t: Unit, src: Unit) {
 
   deathFx(t);
   if (t.kind === 'minion') {
+    if (killer === G.player) sfx('coin');
     if (killer === G.player && onScreen(t))
       for (let i = 0; i < 3; i++) {
         const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
@@ -702,6 +715,8 @@ function performAttack(u: Unit, t: Unit) {
   u.lx = Math.cos(ang);
   u.ly = Math.sin(ang);
   if (u.kind !== 'tower') u.face = ang;
+  if (u.kind === 'tower') sfx('towerShot', u, t === G.player ? 1 : 0.4);
+  else if (u.champ) sfx(ranged ? 'shoot' : 'swing', u, u === G.player ? 0.9 : 0.35);
   if (ranged && u.champ && onScreen(u))
     burst(u.x + u.lx * u.r, u.y + u.ly * u.r, 3, { color: u.champ.def.color, speed: 260, life: 0.18, size: 2.5, angle: ang, spread: 0.8 });
   if (ranged) {
@@ -850,6 +865,7 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
           if (a.selfCenter && u.dead) return;
           for (const e of enemiesIn(u.team, (e) => dist(e, { x: px, y: py }) <= rad + e.r)) hitEnemy(u, e, a, dmg);
           if (a.heal && !u.dead) heal(u, a.heal + 10 * c.level);
+          sfx('boom', { x: px, y: py }, u === G.player || slot === 3 ? 1 : 0.6);
           if (onScreen({ x: px, y: py })) {
             ring(px, py, rad * 1.05, a.color, 0.4, 10);
             burst(px, py, a.stun ? 26 : 16, { kind: 'ember', color: a.color, speed: rad * 2.4, life: 0.45, size: 5, drag: 5, jitter: rad * 0.5 });
@@ -916,6 +932,7 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
             hitEnemy(u, e, a, dmg);
           G.fx.push({ x: sx, y: sy, r: -1, t: 0, max: 0.5, color: a.color });
           beams.push({ sx, sy, ex, ey, w, t: 0.5, color: a.color });
+          sfx('beam', { x: (sx + ex) / 2, y: (sy + ey) / 2 });
           if (onScreen({ x: sx, y: sy })) addTrauma(u === G.player ? 0.5 : 0.3);
           for (let i = 0; i < 40; i++) {
             const k = Math.random();
@@ -940,6 +957,8 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
       break;
     }
   }
+  const castVol = u === G.player ? 1 : 0.6;
+  sfx(({ bolt: 'bolt', nova: 'nova', dash: 'dash', buff: 'buff', beam: 'beamCharge' } as const)[a.kind], u, castVol);
   if (a.kind === 'bolt' && onScreen(u)) ring(u.x, u.y, u.r + 26, a.color, 0.25, 5);
   c.cds[slot] = a.cd * (100 / (100 + c.haste));
   return true;
@@ -957,6 +976,7 @@ function castFlash(u: Unit, tx: number, ty: number) {
   burst(u.x, u.y, 18, { kind: 'ember', color: '#fff6a8', speed: 300, life: 0.4, size: 4 });
   ring(u.x, u.y, 70, '#fff6a8', 0.35, 6);
   c.spellCds[0] = 180;
+  sfx('flash', u, u === G.player ? 1 : 0.5);
   c.recallT = 0;
   if (c.order?.type === 'move') c.order = null;
 }
@@ -966,6 +986,7 @@ function castHeal(u: Unit) {
   heal(u, 90 + 20 * c.level);
   c.buffs.push({ as: 0, ms: 0.3, t: 1.2 });
   c.spellCds[1] = 150;
+  if (u === G.player) sfx('heal');
   ring(u.x, u.y, 90, '#7dff9c', 0.5, 8);
   for (let i = 0; i < 12; i++)
     spawn({ kind: 'plus', x: u.x + (Math.random() - 0.5) * 70, y: u.y + (Math.random() - 0.5) * 40, vy: -120 - Math.random() * 80, life: 0.8, size: 5, color: '#7dff9c', drag: 1.5 });
@@ -974,6 +995,7 @@ function startRecall(u: Unit) {
   const c = u.champ!;
   if (u.dead || c.recallT > 0) return;
   c.recallT = 4;
+  if (u === G.player) sfx('recall');
   c.order = null;
 }
 
@@ -1085,6 +1107,7 @@ function updateChamp(u: Unit, dt: number) {
       u.y = b.y - 60;
       c.order = null;
       ring(u.x, u.y, 110, '#4aa3ff', 0.6, 10);
+      if (u === G.player) sfx('recallDone');
       burst(u.x, u.y, 18, { kind: 'ember', color: '#6fb8ff', speed: 200, life: 0.7, size: 4, angle: -Math.PI / 2, spread: 1.2 });
       u.fadeIn = 0.35;
     }
@@ -1599,6 +1622,9 @@ function render() {
     G.cam.x += (target.x - G.cam.x) * k;
     G.cam.y += (target.y - G.cam.y) * k;
   }
+  audio.listener.x = G.cam.x;
+  audio.listener.y = G.cam.y;
+  audio.listener.halfWidth = W / 2 / G.zoom;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#05080c';
   ctx.fillRect(0, 0, W, H);
@@ -2146,6 +2172,7 @@ function renderShop() {
 function toggleShop(force?: boolean) {
   const el = $('shop');
   const show = force ?? el.classList.contains('hidden');
+  if (running && show === el.classList.contains('hidden')) sfx('click');
   el.classList.toggle('hidden', !show);
   if (show) {
     hudCache.delete('shop');
@@ -2161,6 +2188,7 @@ $('shopgrid').addEventListener('click', (e) => {
   c.gold -= it.cost;
   c.items.push(it.id);
   lastBuyAt = performance.now();
+  sfx('buy');
   btn.classList.add('bought');
   recalc(G.player);
   hudCache.delete('shop');
@@ -2238,6 +2266,7 @@ window.addEventListener('keydown', (e) => {
   const c = P.champ!;
   const w = toWorld(mouse.x, mouse.y);
   if (k === 'escape') return toggleShop(false);
+  if (k === 'm') return toggleMute();
   if (k === 'p') return toggleShop();
   if (k === 'y') {
     G.camLocked = !G.camLocked;
@@ -2252,7 +2281,10 @@ window.addEventListener('keydown', (e) => {
   if (P.dead) return;
   const slot = ['q', 'w', 'e', 'r'].indexOf(k);
   if (slot >= 0) {
-    if (!cast(P, slot, w.x, w.y) && slot === 3 && c.level < 6) addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+    if (!cast(P, slot, w.x, w.y)) {
+      sfx('nope');
+      if (slot === 3 && c.level < 6) addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+    }
     return;
   }
   if (k === 'd') castFlash(P, w.x, w.y);
@@ -2365,8 +2397,10 @@ function quickTarget(slot: number): Vec {
 function touchCast(slot: number, at: Vec) {
   const P = G.player;
   if (slot === 4) castFlash(P, at.x, at.y);
-  else if (!cast(P, slot, at.x, at.y) && slot === 3 && P.champ!.level < 6)
-    addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+  else if (!cast(P, slot, at.x, at.y)) {
+    sfx('nope');
+    if (slot === 3 && P.champ!.level < 6) addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+  }
 }
 
 function touchAttack(kind: 'any' | 'minion' | 'tower') {
@@ -2645,6 +2679,22 @@ function demoFocus(): Vec {
   return best;
 }
 
+function syncMute() {
+  for (const id of ['mute', 'mmute']) {
+    const b = $<HTMLButtonElement>(id);
+    b.textContent = audio.muted ? 'Sound: Off' : 'Sound: On';
+    b.setAttribute('aria-pressed', String(audio.muted));
+  }
+}
+function toggleMute() {
+  setMuted(!audio.muted);
+  syncMute();
+  sfx('click');
+}
+$('mute').addEventListener('click', toggleMute);
+$('mmute').addEventListener('click', toggleMute);
+syncMute();
+
 function buildMotionToggle() {
   const btn = $<HTMLButtonElement>('motion');
   const sync = () => {
@@ -2655,6 +2705,7 @@ function buildMotionToggle() {
   sync();
   btn.addEventListener('click', () => {
     setReduceMotion(!settings.reduceMotion);
+    sfx('click');
     sync();
   });
 }
@@ -2676,6 +2727,7 @@ function buildDifficulty() {
     const b = (e.target as HTMLElement).closest<HTMLElement>('button');
     if (!b) return;
     difficulty = DIFFICULTIES.find((d) => d.id === b.dataset.id) ?? NORMAL;
+    sfx('click');
     try {
       localStorage.setItem('rift-difficulty', difficulty.id);
     } catch {
@@ -2697,6 +2749,7 @@ function buildMenu() {
     const b = (e.target as HTMLElement).closest<HTMLElement>('.champ');
     if (!b) return;
     picked = b.dataset.id!;
+    sfx('click');
     wrap.querySelectorAll('.champ').forEach((el) => el.classList.toggle('sel', el === b));
     const play = $<HTMLButtonElement>('play');
     play.disabled = false;
@@ -2706,6 +2759,7 @@ function buildMenu() {
 function start() {
   if (!picked) return;
   demoMode = false;
+  sfx('click');
   $('feed').innerHTML = '';
   newGame(picked);
   if (TOUCH) {
@@ -2722,6 +2776,7 @@ function start() {
   $('end').classList.add('hidden');
   $('hud').classList.remove('hidden');
   running = true;
+  audio.gameplay = true;
 }
 $('play').addEventListener('click', start);
 $('again').addEventListener('click', () => {
@@ -2729,6 +2784,7 @@ $('again').addEventListener('click', () => {
   $('hud').classList.add('hidden');
   $('menu').classList.remove('hidden');
   running = false;
+  audio.gameplay = false;
   startDemo();
 });
 function showEnd() {
@@ -2740,6 +2796,8 @@ function showEnd() {
   toggleShop(false);
   $('end').classList.remove('hidden');
   running = false;
+  audio.gameplay = false;
+  sfx(won ? 'victory' : 'defeat');
 }
 buildMenu();
 buildDifficulty();
