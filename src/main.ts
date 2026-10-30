@@ -1363,6 +1363,7 @@ function render() {
 
   // fountain lasers zone shimmer
   for (const pd of G.pending) pd.draw(ctx, 1 - pd.t / pd.total);
+  drawAim();
 
   // move marker
   if (G.marker) {
@@ -1628,14 +1629,14 @@ function drawMinimap() {
   mctx.strokeRect((G.cam.x - W / 2 / G.zoom) * s, (G.cam.y - H / 2 / G.zoom) * s, (W / G.zoom) * s, (H / G.zoom) * s);
 }
 
-function hoverUnit(): Unit | null {
+function hoverUnit(pad = 14): Unit | null {
   const w = toWorld(mouse.x, mouse.y);
   let best: Unit | null = null;
   let bd = Infinity;
   for (const u of G.units) {
     if (u.team === G.player.team || !targetable(u)) continue;
     const d = dist(u, w);
-    if (d < u.r + 14 && d < bd) {
+    if (d < u.r + pad && d < bd) {
       bd = d;
       best = u;
     }
@@ -1675,6 +1676,7 @@ function buildHud() {
   const portrait = $('portrait');
   portrait.style.background = c.def.color;
   $('pinit').textContent = c.def.name[0];
+  buildTouch();
 }
 
 function updateHud() {
@@ -1716,6 +1718,7 @@ function updateHud() {
   $('recallbar').classList.toggle('hidden', c.recallT <= 0);
   if (c.recallT > 0) $('recallfill').style.transform = `scaleX(${1 - c.recallT / 4})`;
   if (!$('shop').classList.contains('hidden')) renderShop();
+  updateTouchHud();
 }
 
 function feedMsg(text: string, team: Team | -1) {
@@ -1790,9 +1793,14 @@ function issueClick() {
 }
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 mini.addEventListener('contextmenu', (e) => e.preventDefault());
-canvas.addEventListener('mousedown', (e) => {
+canvas.addEventListener('pointerdown', (e) => {
   if (!running) return;
   mouse = { x: e.clientX, y: e.clientY };
+  if (e.pointerType === 'touch') {
+    const t = hoverUnit(40);
+    if (t && !G.player.dead) G.player.champ!.order = { type: 'attack', target: t };
+    return;
+  }
   mouseHeld = true;
   issueClick();
 });
@@ -1813,7 +1821,7 @@ canvas.addEventListener(
   },
   { passive: false },
 );
-mini.addEventListener('mousedown', (e) => {
+mini.addEventListener('pointerdown', (e) => {
   if (!running) return;
   const r = mini.getBoundingClientRect();
   const wx = ((e.clientX - r.left) / r.width) * MAP;
@@ -1863,7 +1871,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 function edgePan(dt: number) {
-  if (G.camLocked) return;
+  if (G.camLocked || TOUCH) return;
   const m = 24;
   const sp = 1400 * dt;
   if (mouse.x < m) G.cam.x -= sp;
@@ -1873,6 +1881,332 @@ function edgePan(dt: number) {
   G.cam.x = clamp(G.cam.x, 0, MAP);
   G.cam.y = clamp(G.cam.y, 0, MAP);
 }
+
+// ================= touch controls (Wild Rift style) =================
+// Left half: floating move joystick. Right side: attack button with abilities arced around it.
+// Tap an ability to quick-cast at the best nearby target; drag it to aim; release on ✕ to cancel.
+const TOUCH = matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch');
+if (TOUCH) document.body.classList.add('touch');
+
+const AIM_DEAD = 16; // px of drag before a press becomes an aimed cast
+const AIM_MAX = 80; // px of drag that maps to full range
+const joy = { id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
+let facing: Vec = { x: 0.7071, y: -0.7071 };
+let attackHeld: 'any' | 'minion' | 'tower' | null = null;
+let attackTick = 0;
+let touchScale = 1;
+interface Aim {
+  slot: number; // 0-3 abilities, 4 Flash
+  cx: number;
+  cy: number;
+  dx: number;
+  dy: number;
+  aiming: boolean;
+  cancel: boolean;
+}
+let aim: Aim | null = null;
+interface TouchBtn {
+  id: string;
+  label: string;
+  angle: number;
+  r: number;
+  size: number;
+  color: string;
+  el?: HTMLElement;
+  cd?: HTMLElement;
+  cdt?: HTMLElement;
+}
+let touchBtns: TouchBtn[] = [];
+
+function aimReach(slot: number): number {
+  const P = G.player;
+  if (slot === 4) return 425;
+  const a = P.champ!.def.abilities[slot];
+  if (a.kind === 'beam') return 1300;
+  if (a.kind === 'bolt') return Math.min(a.range, 1300);
+  if (a.kind === 'nova') return a.selfCenter ? 0 : a.range;
+  if (a.kind === 'buff') return P.range + 150;
+  return a.range;
+}
+
+function autoTarget(radius: number, allow: (u: Unit) => boolean = () => true): Unit | null {
+  const P = G.player;
+  let champ: Unit | null = null;
+  let other: Unit | null = null;
+  for (const u of G.units) {
+    if (u.team === P.team || !targetable(u) || !allow(u)) continue;
+    const d = dist(u, P) - u.r;
+    if (d > radius) continue;
+    if (u.kind === 'champ') {
+      if (!champ || u.hp / u.maxHp < champ.hp / champ.maxHp) champ = u;
+    } else if (!other || d < dist(other, P) - other.r) other = u;
+  }
+  return champ ?? other;
+}
+
+function aimTarget(a: Aim): Vec {
+  const P = G.player;
+  const len = Math.hypot(a.dx, a.dy) || 1;
+  const nx = a.dx / len;
+  const ny = a.dy / len;
+  const reach = aimReach(a.slot);
+  const def = a.slot < 4 ? P.champ!.def.abilities[a.slot] : null;
+  const k = def && def.kind === 'nova' ? Math.min(1, len / AIM_MAX) : 1;
+  return { x: P.x + nx * reach * k, y: P.y + ny * reach * k };
+}
+
+function quickTarget(slot: number): Vec {
+  const P = G.player;
+  const reach = aimReach(slot);
+  const def = slot < 4 ? P.champ!.def.abilities[slot] : null;
+  if (def && (def.kind === 'buff' || def.selfCenter)) return { x: P.x + facing.x, y: P.y + facing.y };
+  if (slot !== 4 && def?.kind !== 'dash') {
+    const extra = def?.kind === 'nova' ? (def.radius ?? 0) * 0.5 : 0;
+    const t = autoTarget(reach + extra, (u) => u.kind === 'champ' || u.kind === 'minion');
+    if (t) return { x: t.x, y: t.y };
+  }
+  return { x: P.x + facing.x * Math.max(reach, 300), y: P.y + facing.y * Math.max(reach, 300) };
+}
+
+function touchCast(slot: number, at: Vec) {
+  const P = G.player;
+  if (slot === 4) castFlash(P, at.x, at.y);
+  else if (!cast(P, slot, at.x, at.y) && slot === 3 && P.champ!.level < 6)
+    addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+}
+
+function touchAttack(kind: 'any' | 'minion' | 'tower') {
+  const P = G.player;
+  if (P.dead) return;
+  const radius = P.range + P.r + 260;
+  const t =
+    kind === 'minion'
+      ? autoTarget(radius, (u) => u.kind === 'minion')
+      : kind === 'tower'
+        ? autoTarget(radius + 300, (u) => u.kind === 'tower' || u.kind === 'nexus')
+        : autoTarget(radius);
+  if (t) {
+    P.champ!.order = { type: 'attack', target: t };
+    P.champ!.recallT = 0;
+  }
+}
+
+// Called every frame before update().
+function touchTick(dt: number) {
+  if (!TOUCH || !running) return;
+  const P = G.player;
+  const c = P.champ!;
+  const mag = Math.hypot(joy.dx, joy.dy);
+  if (joy.id >= 0 && mag > 12 && !P.dead) {
+    facing = { x: joy.dx / mag, y: joy.dy / mag };
+    c.order = { type: 'move', x: clamp(P.x + facing.x * 160, 30, MAP - 30), y: clamp(P.y + facing.y * 160, 30, MAP - 30) };
+    c.recallT = 0;
+    return;
+  }
+  if (attackHeld && (attackTick -= dt) <= 0) {
+    attackTick = 0.25;
+    touchAttack(attackHeld);
+  }
+}
+
+function drawAim() {
+  if (!aim || !aim.aiming) return;
+  const P = G.player;
+  const t = aimTarget(aim);
+  const col = aim.cancel ? '#ff4d4d' : '#ffffff';
+  const def = aim.slot < 4 ? P.champ!.def.abilities[aim.slot] : null;
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(P.x, P.y, aimReach(aim.slot), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 0.45;
+  if (def && def.kind === 'nova') {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, def.radius ?? 200, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = col;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = def?.width ?? 50;
+    ctx.beginPath();
+    ctx.moveTo(P.x, P.y);
+    ctx.lineTo(t.x, t.y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function layoutTouch() {
+  touchScale = clamp(Math.min(W, H) / 430, 0.72, 1.15);
+  const s = touchScale;
+  const cx = 96 * s;
+  const cy = 100 * s;
+  for (const b of touchBtns) {
+    if (!b.el) continue;
+    const rad = (b.angle * Math.PI) / 180;
+    const x = Math.cos(rad) * b.r * s;
+    const y = Math.sin(rad) * b.r * s;
+    const size = b.size * s;
+    Object.assign(b.el.style, {
+      width: `${size}px`,
+      height: `${size}px`,
+      right: `calc(${cx - x - size / 2}px + env(safe-area-inset-right))`,
+      bottom: `calc(${cy + y - size / 2}px + env(safe-area-inset-bottom))`,
+      fontSize: `${Math.max(9, size / 6)}px`,
+    });
+  }
+}
+
+function buildTouch() {
+  if (!TOUCH) return;
+  const wrap = $('tbuttons');
+  wrap.innerHTML = '';
+  const ab = G.player.champ!.def.abilities;
+  touchBtns = [
+    { id: 'atk', label: 'ATTACK', angle: 0, r: 0, size: 96, color: '#c8aa6e' },
+    { id: 'q', label: ab[0].name, angle: 180, r: 122, size: 62, color: ab[0].color },
+    { id: 'w', label: ab[1].name, angle: 140, r: 122, size: 62, color: ab[1].color },
+    { id: 'e', label: ab[2].name, angle: 100, r: 122, size: 62, color: ab[2].color },
+    { id: 'r', label: ab[3].name, angle: 148, r: 205, size: 68, color: ab[3].color },
+    { id: 'd', label: 'Flash', angle: 102, r: 205, size: 48, color: '#fff6a8' },
+    { id: 'f', label: 'Heal', angle: 72, r: 200, size: 48, color: '#7dff9c' },
+    { id: 'minion', label: 'Minion', angle: 222, r: 100, size: 42, color: '#8fa3b8' },
+    { id: 'tower', label: 'Turret', angle: 50, r: 98, size: 42, color: '#b88f8f' },
+  ];
+  for (const b of touchBtns) {
+    const el = document.createElement('div');
+    el.className = `tbtn tb-${b.id}`;
+    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)"></div><span class="lbl">${b.label}</span><div class="cd"></div><div class="cdt"></div>`;
+    wrap.appendChild(el);
+    b.el = el;
+    b.cd = el.querySelector<HTMLElement>('.cd')!;
+    b.cdt = el.querySelector<HTMLElement>('.cdt')!;
+    bindTouchBtn(b);
+  }
+  layoutTouch();
+}
+
+function bindTouchBtn(b: TouchBtn) {
+  const el = b.el!;
+  const slot = ['q', 'w', 'e', 'r', 'd'].indexOf(b.id);
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (!running || G.player.dead) return;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // pointer already released
+    }
+    el.classList.add('down');
+    if (b.id === 'atk' || b.id === 'minion' || b.id === 'tower') {
+      attackHeld = b.id === 'atk' ? 'any' : b.id;
+      attackTick = 0.25;
+      touchAttack(attackHeld);
+    } else if (b.id === 'f') {
+      castHeal(G.player);
+    } else if (slot >= 0) {
+      const r = el.getBoundingClientRect();
+      aim = { slot, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0, aiming: false, cancel: false };
+    }
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!aim || aim.slot !== slot) return;
+    aim.dx = e.clientX - aim.cx;
+    aim.dy = e.clientY - aim.cy;
+    if (!aim.aiming && Math.hypot(aim.dx, aim.dy) > AIM_DEAD) {
+      aim.aiming = true;
+      $('tcancel').classList.remove('hidden');
+    }
+    const cr = $('tcancel').getBoundingClientRect();
+    aim.cancel = aim.aiming && e.clientX >= cr.left && e.clientX <= cr.right && e.clientY >= cr.top && e.clientY <= cr.bottom;
+    $('tcancel').classList.toggle('hot', aim.cancel);
+  });
+  const release = () => {
+    el.classList.remove('down');
+    if (b.id === 'atk' || b.id === 'minion' || b.id === 'tower') {
+      attackHeld = null;
+      return;
+    }
+    if (!aim || aim.slot !== slot) return;
+    if (running && !G.player.dead && !aim.cancel) touchCast(slot, aim.aiming ? aimTarget(aim) : quickTarget(slot));
+    aim = null;
+    $('tcancel').classList.add('hidden');
+    $('tcancel').classList.remove('hot');
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+}
+
+function updateTouchHud() {
+  if (!TOUCH) return;
+  const P = G.player;
+  const c = P.champ!;
+  const maxes = [...c.def.abilities.map((a) => a.cd * (100 / (100 + c.haste))), 180, 150];
+  const vals = [...c.cds, ...c.spellCds];
+  for (const b of touchBtns) {
+    const i = ['q', 'w', 'e', 'r', 'd', 'f'].indexOf(b.id);
+    if (i < 0 || !b.cd || !b.cdt) continue;
+    const v = vals[i];
+    b.cd.style.height = `${v > 0 ? (v / maxes[i]) * 100 : 0}%`;
+    setText(b.cdt, 'tcd' + i, v > 0 ? String(Math.ceil(v)) : '');
+    b.el!.classList.toggle('locked', i === 3 && c.level < 6);
+  }
+  setText($('mlevel'), 'mlevel', String(c.level));
+  setText($('mgold'), 'mgold', String(Math.floor(c.gold)));
+  setText($('mkda'), 'mkda', `${c.kills}/${c.deaths}/${c.assists} · CS ${c.cs}`);
+  $('mhpfill').style.transform = `scaleX(${clamp(P.hp / P.maxHp, 0, 1)})`;
+}
+
+// floating joystick
+const joyzone = $('joyzone');
+joyzone.addEventListener('pointerdown', (e) => {
+  if (!running || joy.id >= 0) return;
+  e.preventDefault();
+  try {
+      joyzone.setPointerCapture(e.pointerId);
+    } catch {
+      // pointer already released
+    }
+  joy.id = e.pointerId;
+  joy.bx = e.clientX;
+  joy.by = e.clientY;
+  joy.dx = joy.dy = 0;
+  const base = $('joybase');
+  base.style.left = `${e.clientX}px`;
+  base.style.top = `${e.clientY}px`;
+  base.classList.add('on');
+  $('joyknob').style.transform = 'translate(-50%, -50%)';
+});
+joyzone.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== joy.id) return;
+  const max = 60 * touchScale;
+  let dx = e.clientX - joy.bx;
+  let dy = e.clientY - joy.by;
+  const d = Math.hypot(dx, dy);
+  if (d > max) {
+    dx = (dx / d) * max;
+    dy = (dy / d) * max;
+  }
+  joy.dx = dx;
+  joy.dy = dy;
+  $('joyknob').style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+});
+const joyEnd = (e: PointerEvent) => {
+  if (e.pointerId !== joy.id) return;
+  joy.id = -1;
+  joy.dx = joy.dy = 0;
+  $('joybase').classList.remove('on');
+  const c = G?.player.champ;
+  if (c?.order?.type === 'move') c.order = null;
+};
+joyzone.addEventListener('pointerup', joyEnd);
+joyzone.addEventListener('pointercancel', joyEnd);
+$('mshop').addEventListener('click', () => toggleShop());
+$('mrecall').addEventListener('click', () => running && startRecall(G.player));
+window.addEventListener('resize', () => TOUCH && G && layoutTouch());
 
 // ================= menu / end =================
 let picked = '';
@@ -1924,6 +2258,16 @@ function buildMenu() {
 function start() {
   if (!picked) return;
   newGame(picked);
+  if (TOUCH) {
+    G.zoom = clamp(Math.min(W, H) / 700, 0.55, 1);
+    try {
+      void document.documentElement.requestFullscreen?.().then(() =>
+        (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => {}),
+      ).catch(() => {});
+    } catch {
+      // fullscreen not supported (e.g. iOS Safari); play in the browser window
+    }
+  }
   $('menu').classList.add('hidden');
   $('end').classList.add('hidden');
   $('hud').classList.remove('hidden');
@@ -1957,6 +2301,7 @@ function frame(now: number) {
   if (G) {
     if (running) {
       edgePan(dt);
+      touchTick(dt);
       update(dt);
       updateHud();
     }
@@ -1973,7 +2318,10 @@ requestAnimationFrame(frame);
 Object.assign(window, {
   __rift: () => G,
   __riftStep: (seconds: number) => {
-    for (let i = 0; i < seconds * 30; i++) update(1 / 30);
+    for (let i = 0; i < seconds * 30; i++) {
+      touchTick(1 / 30);
+      update(1 / 30);
+    }
   },
   __riftFrame: () => {
     render();

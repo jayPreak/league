@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#05080c" />
     <title>Rift Clash</title>
     <meta name="description" content="A 3v3 browser MOBA modeled on classic lane-pushing mechanics." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -40,6 +44,21 @@
         </div>
       </div>
       <canvas id="minimap" width="220" height="220"></canvas>
+
+      <div id="touch">
+        <div id="joyzone"></div>
+        <div id="joybase"><div id="joyknob"></div></div>
+        <div id="mstats">
+          <div class="mrow"><span id="mlevel">1</span><div class="mhp"><div id="mhpfill"></div></div></div>
+          <div class="mrow"><span id="mkda"></span></div>
+          <div class="mrow">
+            <button id="mshop">Shop · <span id="mgold">0</span>g</button>
+            <button id="mrecall">Recall</button>
+          </div>
+        </div>
+        <div id="tbuttons"></div>
+        <div id="tcancel" class="hidden">✕</div>
+      </div>
     </div>
 
     <div id="shop" class="hidden">
@@ -58,7 +77,13 @@
       <div id="champs"></div>
       <div id="diff"></div>
       <button id="play" disabled>Pick a champion</button>
-      <div class="controls">
+      <div class="controls mob">
+        <div><b>Left thumb</b> drag anywhere to move</div>
+        <div><b>Attack</b> hits the nearest enemy (champions first) · <b>Minion</b> / <b>Turret</b> pick that target</div>
+        <div><b>Abilities</b> tap to auto-aim · drag to aim · release on <b>✕</b> to cancel</div>
+        <div>Landscape recommended</div>
+      </div>
+      <div class="controls desk">
         <div><b>Right / Left click</b> move &amp; attack (hold to keep moving)</div>
         <div><b>Q W E R</b> abilities at cursor (R unlocks at level 6)</div>
         <div><b>D</b> Flash · <b>F</b> Heal · <b>B</b> Recall · <b>S</b> Stop</div>
