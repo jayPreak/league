@@ -12,12 +12,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Geist:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
     <canvas id="game"></canvas>
+    <div id="vignette"></div>
 
     <div id="hud" class="hidden">
       <div id="topbar">
@@ -27,6 +28,7 @@
       </div>
       <div id="scoreline"></div>
       <div id="feed"></div>
+      <div id="announce"></div>
       <div id="respawn" class="hidden"></div>
       <div id="recallbar" class="hidden"><div id="recallfill"></div><span>Recalling</span></div>
 
@@ -34,7 +36,7 @@
         <div id="portrait"><span id="pinit"></span><div id="plevel">1</div></div>
         <div id="center">
           <div id="abilities"></div>
-          <div class="bar hp"><div id="hpfill"></div><span id="hptext"></span></div>
+          <div class="bar hp"><div id="hptrail"></div><div id="hpfill"></div><span id="hptext"></span></div>
           <div class="bar xp"><div id="xpfill"></div></div>
         </div>
         <div id="stats"></div>
@@ -77,6 +79,7 @@
       <div id="champs"></div>
       <div id="diff"></div>
       <button id="play" disabled>Pick a champion</button>
+      <button id="motion" aria-pressed="false">Reduced motion: Off</button>
       <div class="controls mob">
         <div><b>Left thumb</b> drag anywhere to move</div>
         <div><b>Attack</b> hits the nearest enemy (champions first) · <b>Minion</b> / <b>Turret</b> pick that target</div>

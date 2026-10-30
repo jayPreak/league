@@ -33,3 +33,15 @@ npm install
 npm run dev
 npm run build
 ```
+
+## Feel and effects
+
+Effects follow a small set of rules (see `src/fx.ts`):
+
+- **Layered, tiered feedback**: hits get directional sparks, a squash and a damage number that pops with overshoot; kills, turrets and the Nexus step up to bursts, debris, screen shake and a short hit-stop. Big moments get banners (First Blood, Double Kill, turret destroyed) and the Nexus explodes in slow motion.
+- **Trauma screen shake**: events add trauma, shake is `trauma²` driven by summed sines, and it always decays to rest.
+- **Anticipation**: attacks lunge toward the target, dashes leave afterimages, cooldowns glow when ready, health bars show a lagging damage chunk.
+- **Cheap to draw**: pooled particles with a cap (lower on touch devices), cached glow sprites instead of `shadowBlur`, only the visible part of the map is drawn, and the low-health vignette is a CSS layer that only changes opacity.
+- **Reduced motion**: follows the OS setting and can be toggled on the menu; it removes shake, hit-stop and slow motion, halves particles and drops UI movement while keeping the information.
+
+A live all-bot match plays behind the main menu.

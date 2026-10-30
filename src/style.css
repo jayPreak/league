@@ -17,7 +17,7 @@ body {
   overflow: hidden;
   background: #05080c;
   color: var(--text);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: Geist, system-ui, sans-serif;
   user-select: none;
 }
 #game {
@@ -178,7 +178,7 @@ button {
   width: 28px;
   height: 28px;
   font-size: 13px;
-  font-family: Inter, sans-serif;
+  font-family: Geist, sans-serif;
   display: grid;
   place-items: center;
 }
@@ -798,4 +798,421 @@ body.touch #minimap,
 #mstats,
 #topbar {
   z-index: 2;
+}
+
+/* =========================================================
+   Motion layer
+   Curves: enter with a strong ease-out, exit fast. UI motion stays
+   under ~300ms; only rare moments (banners, victory) run longer.
+   ========================================================= */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+}
+#game {
+  transition: filter 400ms var(--ease-out);
+}
+
+/* ---------- menu over the live attract-mode match ---------- */
+#menu {
+  background:
+    radial-gradient(ellipse at center, rgba(8, 12, 18, 0.55) 0%, rgba(4, 6, 10, 0.88) 70%, rgba(2, 3, 6, 0.96) 100%);
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+#menu > * {
+  animation: rise 460ms var(--ease-out) both;
+}
+#menu > .tag {
+  animation-delay: 60ms;
+}
+#menu > #champs {
+  animation: none;
+}
+#menu > #diff {
+  animation-delay: 300ms;
+}
+#menu > #play {
+  animation-delay: 350ms;
+}
+#menu > #motion {
+  animation-delay: 390ms;
+}
+#menu > .controls {
+  animation-delay: 430ms;
+}
+#menu h1 {
+  background: linear-gradient(100deg, #9c7c3c 0%, #f0dca6 45%, #c8aa6e 55%, #8f6f30 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    rise 520ms var(--ease-out) both,
+    sheen 7s 600ms ease-in-out infinite;
+}
+@keyframes sheen {
+  0%,
+  100% {
+    background-position: 100% 0;
+  }
+  50% {
+    background-position: 0% 0;
+  }
+}
+
+/* champion cards: machined double bezel (outer tray + inner core) */
+.champ {
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(200, 170, 110, 0.16);
+  border-radius: 18px;
+  animation: rise 460ms var(--ease-out) both;
+  animation-delay: calc(120ms + var(--i) * 60ms);
+  transition:
+    transform 220ms var(--ease-out),
+    border-color 220ms var(--ease-out),
+    box-shadow 220ms var(--ease-out);
+}
+.champ .core {
+  background: linear-gradient(180deg, #111a24, #0b1118);
+  border-radius: 13px;
+  padding: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.champ .orb {
+  transition:
+    transform 260ms var(--ease-out),
+    box-shadow 260ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .champ:hover {
+    transform: translateY(-3px);
+    border-color: rgba(200, 170, 110, 0.45);
+  }
+  .champ:hover .orb {
+    transform: scale(1.06);
+  }
+}
+.champ:active {
+  transform: scale(0.98);
+}
+.champ.sel {
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 1px rgba(200, 170, 110, 0.35),
+    0 12px 40px -12px rgba(200, 170, 110, 0.5);
+}
+.champ.sel .orb {
+  box-shadow: 0 0 24px var(--glow);
+  animation: orbPulse 1.8s ease-in-out infinite;
+}
+@keyframes orbPulse {
+  50% {
+    box-shadow: 0 0 36px var(--glow);
+  }
+}
+#play,
+#again,
+#diff button,
+#motion,
+#shopbtn,
+#mshop,
+#mrecall,
+.item {
+  transition:
+    transform 140ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    opacity 160ms var(--ease-out);
+}
+#play:active:not(:disabled),
+#again:active,
+#diff button:active,
+#motion:active,
+#shopbtn:active,
+#mshop:active,
+#mrecall:active,
+.item:active:not(:disabled) {
+  transform: scale(0.97);
+}
+#play:not(:disabled) {
+  box-shadow: 0 0 0 0 rgba(79, 195, 217, 0.5);
+  animation:
+    rise 460ms 350ms var(--ease-out) both,
+    callout 2.4s 900ms ease-out infinite;
+}
+@keyframes callout {
+  0% {
+    box-shadow: 0 0 0 0 rgba(79, 195, 217, 0.45);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px rgba(79, 195, 217, 0);
+  }
+}
+#motion {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #9aa3ad;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+}
+#motion[aria-pressed='true'] {
+  color: var(--gold);
+  border-color: var(--gold-dim);
+}
+
+/* ---------- HUD feedback ---------- */
+#hptrail {
+  position: absolute;
+  inset: 0;
+  background: #f4e3b5;
+  transform-origin: left;
+  transition: transform 450ms var(--ease-out) 180ms;
+}
+@keyframes readyGlow {
+  0% {
+    box-shadow:
+      0 0 0 2px #ffe9a8,
+      0 0 22px 4px rgba(255, 220, 130, 0.85);
+    filter: brightness(1.6);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 220, 130, 0);
+    filter: brightness(1);
+  }
+}
+.slot.ready,
+.tbtn.ready {
+  animation: readyGlow 480ms var(--ease-out);
+}
+.tbtn {
+  transition: transform 100ms var(--ease-out);
+}
+.tbtn.down {
+  transform: scale(0.93);
+}
+@keyframes lvlup {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 226, 122, 0.9);
+  }
+  35% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 18px rgba(255, 226, 122, 0);
+  }
+}
+#portrait.lvlup {
+  animation: lvlup 600ms var(--ease-out);
+}
+#gold,
+#mgold {
+  display: inline-block;
+}
+@keyframes pop {
+  0% {
+    transform: scale(1.22);
+    color: #fff3c4;
+  }
+}
+#gold.pop,
+#mgold.pop {
+  animation: pop 240ms var(--ease-out);
+}
+#feed div {
+  animation: fadein 220ms var(--ease-out);
+  transition:
+    opacity 180ms var(--ease-in),
+    transform 180ms var(--ease-in);
+}
+#feed div.out {
+  opacity: 0;
+  transform: translateX(8px);
+}
+@keyframes slotIn {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+    box-shadow: 0 0 0 0 rgba(255, 210, 122, 0.9);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(255, 210, 122, 0);
+  }
+}
+#inv div.new {
+  animation: slotIn 380ms var(--ease-out);
+}
+#inv div.full {
+  border-color: var(--gold-dim);
+  background: linear-gradient(#1b1710, #0c0c0c);
+}
+
+/* ---------- kill / objective banners ---------- */
+#announce {
+  position: fixed;
+  top: 17%;
+  left: 50%;
+  translate: -50% 0;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  padding: 10px 80px;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.65) 20%, rgba(0, 0, 0, 0.65) 80%, transparent);
+  white-space: nowrap;
+}
+#announce b {
+  display: block;
+  font-family: Cinzel, serif;
+  font-weight: 800;
+  font-size: clamp(22px, 4vw, 38px);
+  letter-spacing: 2px;
+}
+#announce small {
+  display: block;
+  font-size: 13px;
+  color: #cfd3d8;
+  margin-top: 2px;
+}
+#announce.good b {
+  color: #f0d48a;
+  text-shadow: 0 0 18px rgba(240, 212, 138, 0.5);
+}
+#announce.bad b {
+  color: #ff7a7a;
+  text-shadow: 0 0 18px rgba(255, 90, 90, 0.5);
+}
+#announce.run {
+  animation: announce 1.9s var(--ease-out) forwards;
+}
+@keyframes announce {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+    letter-spacing: 8px;
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+#announce.run b {
+  animation: tracking 520ms var(--ease-out);
+}
+@keyframes tracking {
+  from {
+    letter-spacing: 9px;
+  }
+}
+body.touch #announce {
+  top: 26%;
+  padding: 8px 40px;
+}
+
+/* ---------- shop ---------- */
+@keyframes shopIn {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+#shop:not(.hidden) {
+  animation: shopIn 200ms var(--ease-out);
+}
+#shopgrid .item {
+  animation: rise 260ms var(--ease-out) both;
+}
+#shopgrid .item:nth-child(2) { animation-delay: 20ms; }
+#shopgrid .item:nth-child(3) { animation-delay: 40ms; }
+#shopgrid .item:nth-child(4) { animation-delay: 60ms; }
+#shopgrid .item:nth-child(5) { animation-delay: 80ms; }
+#shopgrid .item:nth-child(6) { animation-delay: 100ms; }
+#shopgrid .item:nth-child(n + 7) { animation-delay: 120ms; }
+
+/* ---------- end screen ---------- */
+#end:not(.hidden) {
+  animation: fadeBg 400ms var(--ease-out);
+}
+@keyframes fadeBg {
+  from {
+    opacity: 0;
+  }
+}
+#endtitle {
+  animation: titleIn 700ms var(--ease-out) both;
+}
+@keyframes titleIn {
+  from {
+    opacity: 0;
+    transform: scale(1.12);
+    letter-spacing: 22px;
+    filter: blur(6px);
+  }
+}
+#endstats {
+  animation: rise 420ms 380ms var(--ease-out) both;
+}
+#again {
+  animation: rise 420ms 520ms var(--ease-out) both;
+}
+
+/* ---------- reduced motion: keep information, drop movement ---------- */
+@keyframes fadeOnly {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+body.reduce *,
+body.reduce *::before,
+body.reduce *::after {
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+}
+body.reduce #announce.run {
+  animation: fadeOnly 1.9s linear forwards !important;
+}
+body.reduce #announce.run b {
+  animation: none !important;
+}
+
+#vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(90deg, rgba(170, 10, 10, 0.55), rgba(170, 10, 10, 0) 14%, rgba(170, 10, 10, 0) 86%, rgba(170, 10, 10, 0.55)),
+    linear-gradient(180deg, rgba(170, 10, 10, 0.45), rgba(170, 10, 10, 0) 18%, rgba(170, 10, 10, 0) 82%, rgba(170, 10, 10, 0.45));
+}
+#mshop,
+#shopbtn {
+  white-space: nowrap;
 }
