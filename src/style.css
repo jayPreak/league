@@ -515,3 +515,29 @@ button {
     bottom: 150px;
   }
 }
+
+#diff {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+#diff button {
+  background: #0d141c;
+  border: 2px solid var(--line);
+  color: var(--text);
+  padding: 6px 22px;
+  font-weight: 700;
+  border-radius: 4px;
+}
+#diff button.sel {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+#diff p {
+  flex-basis: 100%;
+  text-align: center;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #aaa;
+}

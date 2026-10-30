@@ -2,6 +2,7 @@ import './style.css';
 import {
   BASES,
   CHAMPS,
+  DIFFICULTIES,
   FIRST_WAVE,
   FOUNTAIN_R,
   ITEMS,
@@ -15,7 +16,7 @@ import {
   TEAM_NAME,
   WAVE_INTERVAL,
 } from './data';
-import type { AbilityDef, ChampDef, DmgType, Team, Vec } from './data';
+import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Team, Vec } from './data';
 
 // ================= types =================
 type Kind = 'champ' | 'minion' | 'tower' | 'nexus';
@@ -198,6 +199,10 @@ const fmtTime = (t: number) =>
 let NEXT_ID = 1;
 let G: Game;
 let running = false;
+let difficulty: DifficultyDef = DIFFICULTIES[1];
+const NORMAL = DIFFICULTIES[1];
+// Difficulty only tunes the Red team; Blue bots always play at Normal.
+const diffOf = (u: Unit) => (u.team === 1 ? difficulty : NORMAL);
 
 function makeUnit(p: Partial<Unit> & Pick<Unit, 'kind' | 'team' | 'x' | 'y'>): Unit {
   return {
@@ -373,7 +378,7 @@ function newGame(champId: string) {
   };
   for (const u of units) if (u.champ && u !== player) aiShop(u);
   buildHud();
-  feedMsg('Welcome to the Rift. Minions spawn in 8 seconds.', -1);
+  feedMsg(`Welcome to the Rift (${difficulty.name}). Minions spawn in 8 seconds.`, -1);
 }
 
 // ================= combat =================
@@ -416,7 +421,8 @@ function addFx(x: number, y: number, r: number, color: string, max = 0.4) {
 function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType): number {
   if (!targetable(t) || amt <= 0) return 0;
   const res = type === 'phys' ? t.armor : type === 'magic' ? t.mr : 0;
-  const dmg = amt * (100 / (100 + Math.max(0, res)));
+  const mult = src.champ ? diffOf(src).dmg : 1;
+  const dmg = amt * mult * (100 / (100 + Math.max(0, res)));
   t.hp -= dmg;
   t.hitFlash = 0.12;
   if (t.champ) {
@@ -462,6 +468,7 @@ function gainXp(u: Unit, amt: number) {
 const xpNeed = (lvl: number) => 180 + lvl * 100;
 
 function giveGold(u: Unit, amt: number) {
+  amt = Math.round(amt * diffOf(u).gold);
   u.champ!.gold += amt;
   if (u === G.player) addText(u.x, u.y - 50, `+${amt}g`, '#ffd700', 14);
 }
@@ -514,7 +521,10 @@ function kill(t: Unit, src: Unit) {
   } else if (t.kind === 'nexus') {
     G.over = (1 - t.team) as Team;
     addFx(t.x, t.y, 500, '#ffe27a', 2);
-    setTimeout(showEnd, 1800);
+    const ended = G;
+    setTimeout(() => {
+      if (G === ended && running) showEnd();
+    }, 1800);
   }
 }
 
@@ -969,6 +979,7 @@ function aiCast(u: Unit, s: number, foe: Unit) {
   const c = u.champ!;
   const a = c.def.abilities[s];
   if (c.cds[s] > 0 || (s === 3 && c.level < 6)) return;
+  if (Math.random() > diffOf(u).castChance) return;
   const d = dist(u, foe);
   const fp = foe.hp / foe.maxHp;
   const jx = foe.x + (Math.random() - 0.5) * 60;
@@ -997,7 +1008,7 @@ function aiChamp(u: Unit, dt: number) {
   const c = u.champ!;
   c.think -= dt;
   if (c.think > 0) return;
-  c.think = 0.2 + Math.random() * 0.1;
+  c.think = diffOf(u).think + Math.random() * 0.1;
   const home = BASES[u.team];
   const ownNexus = NEXUS[u.team];
   const hpP = u.hp / u.maxHp;
@@ -1033,7 +1044,7 @@ function aiChamp(u: Unit, dt: number) {
     const enemies = G.units.filter((o) => o.champ && !o.dead && o.team !== u.team && dist(o, u) < 900).length;
     const foeSafe = towerCovering(foe, foe.team, 50) !== null;
     const edge = hpP - fp + 0.08 * (allies - enemies);
-    const want = (edge > 0.05 || fp < 0.25) && (!foeSafe || (fp < 0.15 && hpP > 0.5));
+    const want = (edge > diffOf(u).edge || fp < 0.25) && (!foeSafe || (fp < 0.15 && hpP > 0.5));
     if (want && dist(u, foe) < 700) {
       for (let s = 0; s < 4; s++) aiCast(u, s, foe);
       c.order = { type: 'attack', target: foe };
@@ -1097,7 +1108,7 @@ function update(dt: number) {
 
   for (const u of G.units) {
     if (u.champ) {
-      u.champ.gold += 2 * dt;
+      u.champ.gold += 2 * dt * diffOf(u).gold;
       if (u.dead) {
         u.champ.respawnT -= dt;
         if (u.champ.respawnT <= 0) {
@@ -1865,6 +1876,32 @@ function edgePan(dt: number) {
 
 // ================= menu / end =================
 let picked = '';
+function buildDifficulty() {
+  try {
+    difficulty = DIFFICULTIES.find((d) => d.id === localStorage.getItem('rift-difficulty')) ?? NORMAL;
+  } catch {
+    difficulty = NORMAL;
+  }
+  const wrap = $('diff');
+  const render = () => {
+    wrap.innerHTML =
+      DIFFICULTIES.map(
+        (d) => `<button data-id="${d.id}" class="${d === difficulty ? 'sel' : ''}">${d.name}</button>`,
+      ).join('') + `<p>${difficulty.desc}</p>`;
+  };
+  render();
+  wrap.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+    if (!b) return;
+    difficulty = DIFFICULTIES.find((d) => d.id === b.dataset.id) ?? NORMAL;
+    try {
+      localStorage.setItem('rift-difficulty', difficulty.id);
+    } catch {
+      // storage unavailable; selection still applies for this session
+    }
+    render();
+  });
+}
 function buildMenu() {
   const wrap = $('champs');
   wrap.innerHTML = CHAMPS.map(
@@ -1904,12 +1941,13 @@ function showEnd() {
   const c = G.player.champ!;
   $('endtitle').textContent = won ? 'VICTORY' : 'DEFEAT';
   $('endtitle').style.color = won ? '#c8aa6e' : '#ff5a5a';
-  $('endstats').innerHTML = `${c.def.name} · Level ${c.level}<br/>K/D/A ${c.kills} / ${c.deaths} / ${c.assists} · CS ${c.cs}<br/>Game time ${fmtTime(G.t)} · Team kills ${G.kills[0]} – ${G.kills[1]}`;
+  $('endstats').innerHTML = `${c.def.name} · Level ${c.level} · ${difficulty.name}<br/>K/D/A ${c.kills} / ${c.deaths} / ${c.assists} · CS ${c.cs}<br/>Game time ${fmtTime(G.t)} · Team kills ${G.kills[0]} – ${G.kills[1]}`;
   toggleShop(false);
   $('end').classList.remove('hidden');
   running = false;
 }
 buildMenu();
+buildDifficulty();
 
 // ================= loop =================
 let last = performance.now();

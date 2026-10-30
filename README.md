@@ -14,6 +14,8 @@ This is an original game: the champions, abilities, items, art and code are all 
 
 You play mid lane on Blue. AI bots play top and bot for you, and all three Red champions are AI. Destroy an inner turret to expose the enemy Nexus, then destroy it to win.
 
+Pick **Easy**, **Normal** or **Hard** on the menu. Difficulty only tunes the Red bots: how much HP lead they want before fighting, how fast they react, how often they use abilities, and their damage and gold. Your choice is remembered in the browser.
+
 ## Develop
 
 ```bash

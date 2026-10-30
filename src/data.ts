@@ -376,3 +376,20 @@ export const ITEMS: ItemDef[] = [
   { id: 'plate', name: 'Titan Plate', cost: 2800, desc: '+450 HP, +45 Armor, +35 MR', hp: 450, armor: 45, mr: 35 },
 ];
 export const ITEM_MAP: Record<string, ItemDef> = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+
+// ---------- difficulty (applies to the Red team only) ----------
+export interface DifficultyDef {
+  id: string;
+  name: string;
+  desc: string;
+  dmg: number; // damage multiplier for Red champions
+  gold: number; // gold multiplier for Red champions
+  edge: number; // HP lead a Red bot wants before it starts a fight
+  think: number; // seconds between Red bot decisions
+  castChance: number; // chance a Red bot uses a ready ability when it could
+}
+export const DIFFICULTIES: DifficultyDef[] = [
+  { id: 'easy', name: 'Easy', desc: 'Passive bots, slower reactions, less damage', dmg: 0.75, gold: 0.85, edge: 0.2, think: 0.45, castChance: 0.35 },
+  { id: 'normal', name: 'Normal', desc: 'Balanced bots', dmg: 1, gold: 1, edge: 0.05, think: 0.2, castChance: 1 },
+  { id: 'hard', name: 'Hard', desc: 'Aggressive bots, fast reactions, more damage and gold', dmg: 1.2, gold: 1.15, edge: -0.1, think: 0.12, castChance: 1 },
+];
