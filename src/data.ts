@@ -70,6 +70,7 @@ export interface ItemDef {
   ms?: number;
   haste?: number;
   ls?: number;
+  unique?: boolean;
 }
 
 // ---------- map ----------
@@ -367,7 +368,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'vest', name: 'Chain Vest', cost: 300, desc: '+15 Armor', armor: 15 },
   { id: 'cloak', name: 'Null Cloak', cost: 450, desc: '+25 MR', mr: 25 },
   { id: 'dagger', name: 'Quick Dagger', cost: 300, desc: '+12% AS', as: 0.12 },
-  { id: 'boots', name: 'Swift Boots', cost: 300, desc: '+45 Move Speed', ms: 45 },
+  { id: 'boots', name: 'Swift Boots', cost: 300, desc: '+45 Move Speed (one only)', ms: 45, unique: true },
   { id: 'blade', name: 'Ruinblade', cost: 3000, desc: '+50 AD, +25% AS, 12% lifesteal', ad: 50, as: 0.25, ls: 0.12 },
   { id: 'edge', name: 'Void Edge', cost: 2900, desc: '+60 AD, +20 ability haste', ad: 60, haste: 20 },
   { id: 'bow', name: 'Storm Bow', cost: 2700, desc: '+35 AD, +45% AS, +25 MS', ad: 35, as: 0.45, ms: 25 },

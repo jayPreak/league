@@ -1729,7 +1729,7 @@ function renderShop() {
     : 'You can only buy items while in your fountain (press B to recall).';
   const html = ITEMS.map(
     (it) =>
-      `<button class="item" data-id="${it.id}" ${!ok || c.gold < it.cost || c.items.length >= 6 ? 'disabled' : ''}><span class="cost">${it.cost}</span><b>${it.name}</b><small>${it.desc}</small></button>`,
+      `<button class="item" data-id="${it.id}" ${!ok || c.gold < it.cost || c.items.length >= 6 || (it.unique && c.items.includes(it.id)) ? 'disabled' : ''}><span class="cost">${it.cost}</span><b>${it.name}</b><small>${it.desc}</small></button>`,
   ).join('');
   if (hudCache.get('shop') !== html + note) {
     hudCache.set('shop', html + note);
@@ -1751,7 +1751,7 @@ $('shopgrid').addEventListener('click', (e) => {
   if (!btn || btn.disabled) return;
   const it = ITEM_MAP[btn.dataset.id!];
   const c = G.player.champ!;
-  if (!canShop() || c.gold < it.cost || c.items.length >= 6) return;
+  if (!canShop() || c.gold < it.cost || c.items.length >= 6 || (it.unique && c.items.includes(it.id))) return;
   c.gold -= it.cost;
   c.items.push(it.id);
   recalc(G.player);
