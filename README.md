@@ -49,3 +49,9 @@ A live all-bot match plays behind the main menu.
 ## Sound
 
 All sound is synthesized at runtime with the Web Audio API (`src/audio.ts`); there are no audio files. Each effect is built from a pitched oscillator and filtered noise, with slight random pitch so repeats don't drone. World sounds are panned and faded by their position relative to the camera, each sound has a minimum replay gap, and the total number of voices is capped. The bot match behind the menu stays silent. Toggle sound with **M** or the Sound button (remembered in the browser).
+
+## 3D
+
+The match renders in 3D with Three.js: an orthographic camera tilted 56° like a MOBA camera, a painted ground texture, instanced jungle trees, rocks and brush, an animated river, and turrets, Nexus and fountains built from primitives. Ground decals (telegraphs, range rings, selection circles) are painted on a canvas laid on the ground under the units; health bars, numbers and air effects sit on a 2D overlay.
+
+Characters are the free **CC0** [KayKit Adventurers and Skeletons packs by Kay Lousberg](https://kaylousberg.com): Mage, Barbarian and Rogue for the champions, skeleton warriors, mages and brutes for team-coloured minions. All share one rig, so `scripts/prune-models.mjs` ships the meshes without animations plus two small clip libraries (1.8 MB total, meshopt-compressed). No Riot assets are used.

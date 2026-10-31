@@ -28,7 +28,17 @@ body {
   display: block;
   cursor: crosshair;
 }
-#game.dead {
+#world {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  pointer-events: none;
+  transition: filter 400ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+#game.dead,
+#world.dead {
   filter: grayscale(0.85) brightness(0.7);
 }
 #game.hostile {
@@ -1252,4 +1262,19 @@ body.reduce #announce.run b {
 #mmute[aria-pressed='true'] {
   color: #ff8a8a;
   border-color: rgba(255, 120, 120, 0.4);
+}
+
+/* ---------- 3D-rendered champion portraits ---------- */
+.champ .orb.img {
+  width: 84px;
+  height: 84px;
+  color: transparent;
+  background-size: 104%;
+  background-position: center 40%;
+  background-repeat: no-repeat;
+  border: 2px solid var(--gold-dim);
+  overflow: hidden;
+}
+#portrait {
+  overflow: hidden;
 }
