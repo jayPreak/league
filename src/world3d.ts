@@ -32,18 +32,19 @@ export interface WUnit {
   pop: number;
   fadeIn: number;
   slowT: number;
-  mtype: 'melee' | 'caster' | 'siege' | null;
+  mtype: 'melee' | 'caster' | 'siege' | 'super' | null;
+  tier: number;
   act: string;
   actN: number;
   champ: { def: { id: string; ranged: boolean }; dash: unknown; recallT: number } | null;
 }
 
 // Height of the top of each body, for health bars, hover tests and effects.
-export function unitHeight(u: Pick<WUnit, 'kind' | 'mtype'>): number {
+export function unitHeight(u: Pick<WUnit, 'kind' | 'mtype' | 'tier'>): number {
   if (u.kind === 'champ') return 150;
-  if (u.kind === 'tower') return 300;
+  if (u.kind === 'tower') return u.tier === 2 ? 170 : 300;
   if (u.kind === 'nexus') return 250;
-  return u.mtype === 'siege' ? 104 : u.mtype === 'caster' ? 76 : 82;
+  return u.mtype === 'super' ? 140 : u.mtype === 'siege' ? 104 : u.mtype === 'caster' ? 76 : 82;
 }
 
 // ---------- helpers ----------
@@ -430,6 +431,33 @@ function buildNexus(team: Team): Struct {
   scene.add(root);
   return { root, alive, rubble, crystal, spin, wasDead: false };
 }
+// inhibitor: a crystal sphere held in a floating ring above a stepped plinth
+function buildInhib(team: Team): Struct {
+  const root = new THREE.Group();
+  const alive = new THREE.Group();
+  const rubble = new THREE.Group();
+  part(new THREE.CylinderGeometry(70, 84, 22, 10), stoneMat[team], 11, root);
+  part(new THREE.CylinderGeometry(52, 62, 18, 10), trimMat[team], 31, root);
+  const crystal = part(new THREE.IcosahedronGeometry(38, 1), crystalMat[team], 120, alive);
+  crystal.castShadow = false;
+  const spin = new THREE.Group();
+  spin.position.y = 120;
+  const r1 = part(new THREE.TorusGeometry(58, 5, 6, 32), trimMat[team], 0, spin);
+  r1.rotation.x = Math.PI / 2;
+  const r2 = part(new THREE.TorusGeometry(50, 4, 6, 32), trimMat[team], 0, spin);
+  r2.rotation.y = Math.PI / 2;
+  alive.add(spin);
+  for (let i = 0; i < 6; i++) {
+    const r = part(new THREE.OctahedronGeometry(12 + rnd() * 14, 0), i % 2 ? crystalMat[team] : rubbleMat, 48, rubble);
+    r.position.x = (rnd() - 0.5) * 90;
+    r.position.z = (rnd() - 0.5) * 90;
+  }
+  rubble.visible = false;
+  root.add(alive, rubble);
+  scene.add(root);
+  return { root, alive, rubble, crystal, spin, wasDead: false };
+}
+
 // fountains: a low stone dais with a glowing rune ring champions stand on
 BASES.forEach((b, team) => {
   const root = new THREE.Group();
@@ -458,6 +486,7 @@ const MINIONS = {
   melee: { file: 'Skeleton_Minion', weapon: 'Skeleton_Blade', offhand: 'Skeleton_Shield_Small_A', attack: '1H_Melee_Attack_Chop', tint: /Cloak/ },
   caster: { file: 'Skeleton_Mage', weapon: 'Skeleton_Staff', offhand: '', attack: 'Spellcast_Shoot', tint: /Hat/ },
   siege: { file: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', offhand: '', attack: '2H_Melee_Attack_Chop', tint: /Cloak|Helmet/ },
+  super: { file: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', offhand: 'Skeleton_Shield_Small_A', attack: '2H_Melee_Attack_Chop', tint: /Cloak|Helmet|Body/ },
 } as const;
 
 const templates = new Map<string, THREE.Object3D>();
@@ -709,7 +738,7 @@ export function syncUnits(units: WUnit[], o: SyncOpts) {
     if (u.kind === 'tower' || u.kind === 'nexus') {
       let s = structs.get(u);
       if (!s) {
-        s = u.kind === 'tower' ? buildTower(u.team) : buildNexus(u.team);
+        s = u.kind === 'nexus' ? buildNexus(u.team) : u.tier === 2 ? buildInhib(u.team) : buildTower(u.team);
         s.root.position.set(u.x, 0, u.y);
         structs.set(u, s);
       }
@@ -721,10 +750,13 @@ export function syncUnits(units: WUnit[], o: SyncOpts) {
       if (!u.dead) {
         const charge = u.lunge;
         s.crystal.rotation.y = o.time * (u.kind === 'nexus' ? 0.6 : 1.4);
-        s.crystal.position.y = (u.kind === 'nexus' ? 170 : 282) + Math.sin(o.time * 2 + u.x) * 6;
+        const inhib = u.kind === 'tower' && u.tier === 2;
+        s.crystal.position.y = (u.kind === 'nexus' ? 170 : inhib ? 120 : 282) + Math.sin(o.time * 2 + u.x) * 6;
         const sc = 1 + 0.25 * charge + (u.hitFlash > 0 ? 0.08 : 0);
-        s.crystal.scale.set((u.kind === 'nexus' ? 0.8 : 1) * sc, (u.kind === 'nexus' ? 1.6 : 1.7) * sc, (u.kind === 'nexus' ? 0.8 : 1) * sc);
-        if (s.spin) s.spin.rotation.y = o.time * 0.5;
+        if (inhib) s.crystal.scale.setScalar(sc);
+        else s.crystal.scale.set((u.kind === 'nexus' ? 0.8 : 1) * sc, (u.kind === 'nexus' ? 1.6 : 1.7) * sc, (u.kind === 'nexus' ? 0.8 : 1) * sc);
+        if (s.spin) s.spin.rotation.y = o.time * (inhib ? 1.2 : 0.5);
+        if (inhib && s.spin) s.spin.rotation.x = Math.sin(o.time * 0.7) * 0.4;
       }
       continue;
     }
@@ -820,7 +852,7 @@ function animate(av: Avatar, o: SyncOpts, visible: boolean) {
   const k = u.pop * u.pop;
   const born = u.fadeIn > 0 ? easeOutBack(1 - u.fadeIn / 0.45) : 1;
   const lunge = u.lunge > 0 ? Math.sin((1 - u.lunge) * Math.PI) : 0;
-  const reach = u.kind === 'champ' && !u.champ!.def.ranged ? 18 : u.mtype === 'melee' ? 10 : -4;
+  const reach = u.kind === 'champ' && !u.champ!.def.ranged ? 18 : u.mtype === 'melee' || u.mtype === 'super' ? 10 : -4;
   av.root.position.set(u.x + u.lx * lunge * reach, 0, u.y + u.ly * lunge * reach);
   av.root.rotation.y = 0;
   av.model.rotation.y = av.yaw;

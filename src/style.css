@@ -1278,3 +1278,127 @@ body.reduce #announce.run b {
 #portrait {
   overflow: hidden;
 }
+
+/* ---------- mana and ability ranks ---------- */
+.bar.mp {
+  height: 9px;
+  margin-top: 2px;
+}
+#mpfill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#4f9dff, #1f5fc8);
+  transform-origin: left;
+}
+#mptext {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 8px;
+  line-height: 9px;
+  font-weight: 600;
+  color: #dbe8ff;
+}
+.mmp {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: calc(100% + 1px);
+  height: 4px;
+  background: #0b1630;
+  border: 1px solid #000;
+}
+#mmpfill {
+  position: absolute;
+  inset: 0;
+  background: #3d8bff;
+  transform-origin: left;
+}
+.slot .mana {
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  z-index: 3;
+  font-size: 9px;
+  font-weight: 700;
+  color: #9cc4ff;
+  text-shadow: 0 1px 2px #000;
+}
+.slot .pips {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  z-index: 3;
+}
+.slot .pips i {
+  width: 6px;
+  height: 3px;
+  background: #2a2a2a;
+  border: 1px solid #000;
+}
+.slot .pips i.on {
+  background: #f0c96a;
+}
+.slot .plus,
+.tbtn .tplus {
+  display: none;
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #f0c96a;
+  background: radial-gradient(circle at 40% 35%, #ffe7a3, #b8862e);
+  color: #1a1206;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 18px;
+  text-align: center;
+  z-index: 5;
+  cursor: pointer;
+  animation: plusPulse 1.2s ease-in-out infinite;
+}
+.slot.learn .plus,
+.tbtn.learn .tplus {
+  display: block;
+}
+.tbtn .tplus {
+  width: 26px;
+  height: 26px;
+  line-height: 24px;
+  top: -10px;
+  left: auto;
+  right: -8px;
+  transform: none;
+}
+@keyframes plusPulse {
+  50% {
+    box-shadow: 0 0 10px 2px rgba(240, 201, 106, 0.8);
+  }
+}
+.slot.nomana .ico,
+.tbtn.nomana .ico {
+  filter: saturate(0.3) brightness(0.6);
+  box-shadow: inset 0 0 0 2px #3d8bff;
+}
+.tbtn.locked .ico {
+  filter: grayscale(1) brightness(0.45);
+}
+body.reduce .slot .plus,
+body.reduce .tbtn .tplus {
+  animation: none;
+}
+.slot {
+  overflow: visible;
+}
+.slot .ico,
+.slot .cd {
+  border-radius: 2px;
+}

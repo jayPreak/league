@@ -38,7 +38,7 @@ import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Team, Vec } from './
 
 // ================= types =================
 type Kind = 'champ' | 'minion' | 'tower' | 'nexus';
-type MinionType = 'melee' | 'caster' | 'siege';
+type MinionType = 'melee' | 'caster' | 'siege' | 'super';
 interface Buff {
   as: number;
   ms: number;
@@ -78,6 +78,7 @@ interface Champ {
   think: number;
   retreating: boolean;
   buildIdx: number;
+  ranks: number[]; // points in Q W E R; one point per level, R at 6/11/16
 }
 interface Unit {
   id: number;
@@ -118,6 +119,10 @@ interface Unit {
   fadeIn: number; // spawn scale-in, seconds left
   hpTrail: number; // lagging damage chunk on health bars
   retarget: number;
+  mp: number;
+  maxMp: number;
+  revealT: number; // seconds a champion stays visible after attacking from brush
+  reviveT: number; // inhibitors rebuild after this many seconds
   act: string; // last one-shot action ('attack', 'cast0'..'cast3', 'flash'), drives 3D animation
   actN: number; // bumps every action so repeats replay
 }
@@ -269,6 +274,10 @@ function makeUnit(p: Partial<Unit> & Pick<Unit, 'kind' | 'team' | 'x' | 'y'>): U
     fadeIn: 0,
     hpTrail: 1,
     retarget: 0,
+    mp: 0,
+    maxMp: 0,
+    revealT: 0,
+    reviveT: 0,
     act: '',
     actN: 0,
     ...p,
@@ -300,6 +309,9 @@ function recalc(u: Unit) {
     haste += it.haste ?? 0;
     ls += it.ls ?? 0;
   }
+  const oldMp = u.maxMp;
+  u.maxMp = d.mp + d.mpL * L;
+  u.mp = oldMp > 0 ? Math.min(u.maxMp, u.mp + Math.max(0, u.maxMp - oldMp)) : u.maxMp;
   const old = u.maxHp;
   u.maxHp = hp;
   u.hp = old > 0 ? Math.min(hp, u.hp + Math.max(0, hp - old)) : hp;
@@ -349,9 +361,11 @@ function makeChamp(def: ChampDef, team: Team, lane: number, isPlayer: boolean): 
     think: Math.random() * 0.3,
     retreating: false,
     buildIdx: 0,
+    ranks: [0, 0, 0, 0],
   };
   u.maxHp = 0;
   recalc(u);
+  if (!isPlayer) autoRank(u);
   return u;
 }
 
@@ -369,7 +383,7 @@ function newGame(champId: string) {
     for (let lane = 0; lane < 3; lane++) {
       const poly = lanePoly(lane, team);
       const len = polyLen(poly);
-      [0.3, 0.14].forEach((f, tier) => {
+      [0.36, 0.22].forEach((f, tier) => {
         const p = pointAt(poly, len * f);
         units.push(
           makeUnit({
@@ -391,7 +405,38 @@ function newGame(champId: string) {
           }),
         );
       });
+      // inhibitor: no attack, rebuilds itself, and while down the enemy spawns super minions here
+      const ip = pointAt(poly, Math.max(430, len * 0.11));
+      units.push(
+        makeUnit({ kind: 'tower', team, x: ip.x, y: ip.y, r: 46, hp: 3000, maxHp: 3000, armor: 20, mr: 20, range: 0, lane, tier: 2, name: `${LANE_NAMES[lane]} Inhibitor` }),
+      );
     }
+    // two nexus turrets stand between the inhibitors and the nexus
+    const nx = NEXUS[team];
+    const ex = NEXUS[1 - team];
+    const dl = dist(nx, ex);
+    const fx = (ex.x - nx.x) / dl;
+    const fy = (ex.y - nx.y) / dl;
+    for (const side of [-1, 1])
+      units.push(
+        makeUnit({
+          kind: 'tower',
+          team,
+          x: nx.x + fx * 210 - fy * side * 140,
+          y: nx.y + fy * 210 + fx * side * 140,
+          r: 42,
+          hp: 2700,
+          maxHp: 2700,
+          ad: 190,
+          armor: 40,
+          mr: 40,
+          range: 775,
+          as: 0.85,
+          lane: 1,
+          tier: 3,
+          name: 'Nexus Turret',
+        }),
+      );
     units.push(
       makeUnit({ kind: 'nexus', team, ...NEXUS[team], r: 80, hp: 5000, maxHp: 5000, name: 'Nexus' }),
     );
@@ -434,16 +479,18 @@ function targetable(t: Unit): boolean {
   return true;
 }
 
+// Structures open in order: outer -> inner -> inhibitor per lane; any inhibitor opens the nexus
+// turrets; both nexus turrets open the nexus.
 function refreshOpenStructures() {
   G.open.clear();
+  const down = (team: Team, tier: number, lane?: number) =>
+    G.units.some((o) => o.kind === 'tower' && o.team === team && o.tier === tier && o.dead && (lane === undefined || o.lane === lane));
   for (const t of G.units) {
     if (t.dead) continue;
     if (t.kind === 'tower') {
-      if (t.tier === 0) G.open.add(t);
-      else if (G.units.some((o) => o.kind === 'tower' && o.team === t.team && o.lane === t.lane && o.tier === 0 && o.dead))
-        G.open.add(t);
+      if (t.tier === 0 || (t.tier < 3 && down(t.team, t.tier - 1, t.lane)) || (t.tier === 3 && down(t.team, 2))) G.open.add(t);
     } else if (t.kind === 'nexus') {
-      if (G.units.some((o) => o.kind === 'tower' && o.team === t.team && o.tier === 1 && o.dead)) G.open.add(t);
+      if (G.units.filter((o) => o.kind === 'tower' && o.team === t.team && o.tier === 3 && o.dead).length >= 2) G.open.add(t);
     }
   }
 }
@@ -555,6 +602,31 @@ function heal(u: Unit, amt: number) {
   u.hp = Math.min(u.maxHp, u.hp + amt);
 }
 
+// ---------- ability ranks: one point per level; basics cap at ceil(level/2), R at 6/11/16 ----------
+const rankCap = (lvl: number, slot: number) => (slot === 3 ? (lvl >= 16 ? 3 : lvl >= 11 ? 2 : lvl >= 6 ? 1 : 0) : Math.min(5, Math.ceil(lvl / 2)));
+const skillPoints = (c: Champ) => c.level - c.ranks.reduce((a, b) => a + b, 0);
+const canRank = (c: Champ, slot: number) => skillPoints(c) > 0 && c.ranks[slot] < rankCap(c.level, slot);
+function rankUp(u: Unit, slot: number): boolean {
+  const c = u.champ!;
+  if (!canRank(c, slot)) return false;
+  c.ranks[slot]++;
+  if (G && u === G.player) {
+    sfx('click');
+    if (slot === 3 && c.ranks[3] === 1) feedMsg('Ultimate learned! Press R.', -1);
+  }
+  return true;
+}
+// Bots take Q, W, E once, then R whenever possible, then max their first ability.
+function autoRank(u: Unit) {
+  const c = u.champ!;
+  while (skillPoints(c) > 0) {
+    const order = c.ranks.slice(0, 3).some((r) => r === 0) ? [3, ...[0, 1, 2].filter((i) => c.ranks[i] === 0)] : [3, 0, 1, 2];
+    if (!order.some((i) => rankUp(u, i))) break;
+  }
+}
+// Rank 1 hits for 75% and each rank adds 15%; ultimates go 100/130/160%.
+const rankMul = (slot: number, rank: number) => (slot === 3 ? 1 + 0.3 * (rank - 1) : 0.75 + 0.15 * (rank - 1));
+
 function gainXp(u: Unit, amt: number) {
   const c = u.champ!;
   c.xp += amt;
@@ -574,9 +646,10 @@ function gainXp(u: Unit, amt: number) {
       pt.classList.add('lvlup');
       sfx('levelUp');
       addText(u.x, u.y - 60, `LEVEL ${c.level}`, '#ffe27a', 20);
-      if (c.level === 6) feedMsg('Ultimate unlocked! Press R.', -1);
+      if (c.level === 6) feedMsg(TOUCH ? 'Ultimate ready to learn: tap + on it.' : 'Ultimate ready to learn: Ctrl+R or click +.', -1);
     }
   }
+  if (!c.isPlayer) autoRank(u);
 }
 const xpNeed = (lvl: number) => 180 + lvl * 100;
 
@@ -635,10 +708,10 @@ function kill(t: Unit, src: Unit) {
         spawn({ kind: 'coin', x: t.x, y: t.y, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, life: 0.75, size: 5, drag: 2, spin: 14, home: G.player });
       }
     if (killer && killer.team !== t.team) {
-      giveGold(killer, t.mtype === 'siege' ? 60 : t.mtype === 'melee' ? 21 : 14);
+      giveGold(killer, t.mtype === 'siege' || t.mtype === 'super' ? 60 : t.mtype === 'melee' ? 21 : 14);
       killer.champ!.cs++;
     }
-    const xp = t.mtype === 'siege' ? 90 : t.mtype === 'melee' ? 60 : 30;
+    const xp = t.mtype === 'siege' || t.mtype === 'super' ? 90 : t.mtype === 'melee' ? 60 : 30;
     for (const c of foes) gainXp(c, xp / Math.max(1, foes.length * 0.75));
   } else if (t.champ) {
     const c = t.champ;
@@ -678,9 +751,13 @@ function kill(t: Unit, src: Unit) {
     } else feedMsg(`${t.name} was executed`, (1 - t.team) as Team);
     c.damagers.clear();
   } else if (t.kind === 'tower') {
-    for (const c of G.units) if (c.champ && c.team !== t.team) giveGold(c, 150);
+    for (const c of G.units) if (c.champ && c.team !== t.team) giveGold(c, t.tier === 2 ? 50 : 150);
     feedMsg(`${TEAM_NAME[1 - t.team]} destroyed the ${TEAM_NAME[t.team]} ${t.name}`, (1 - t.team) as Team);
-    announce(t.team === G.player.team ? 'Your turret has been destroyed' : 'Turret destroyed', t.team === G.player.team ? 'bad' : 'good');
+    const mine = t.team === G.player.team;
+    if (t.tier === 2) {
+      t.reviveT = 150;
+      announce(mine ? 'Your inhibitor has been destroyed' : 'Inhibitor destroyed', mine ? 'bad' : 'good', mine ? 'Enemy super minions are coming' : 'Your super minions will spawn');
+    } else announce(mine ? 'Your turret has been destroyed' : 'Turret destroyed', mine ? 'bad' : 'good');
   } else if (t.kind === 'nexus') {
     G.over = (1 - t.team) as Team;
     slowmo = settings.reduceMotion ? 0 : 2.2;
@@ -708,16 +785,17 @@ function kill(t: Unit, src: Unit) {
 }
 
 function performAttack(u: Unit, t: Unit) {
-  const ranged = u.kind === 'tower' || (u.champ ? u.champ.def.ranged : u.mtype !== 'melee');
+  const ranged = u.kind === 'tower' || (u.champ ? u.champ.def.ranged : u.mtype === 'caster' || u.mtype === 'siege');
   let dmg = u.ad;
   let type: DmgType = 'phys';
   if (u.kind === 'tower' && t.kind === 'minion') {
-    dmg = t.maxHp * (t.mtype === 'siege' ? 0.14 : t.mtype === 'caster' ? 0.7 : 0.45);
+    dmg = t.maxHp * (t.mtype === 'super' ? 0.07 : t.mtype === 'siege' ? 0.14 : t.mtype === 'caster' ? 0.7 : 0.45);
     type = 'true';
   }
   if (u.kind === 'minion' && t.kind === 'champ') dmg *= 0.6;
   const ang = Math.atan2(t.y - u.y, t.x - u.x);
   u.lunge = 1;
+  u.revealT = 1.2;
   u.act = 'attack';
   u.actN++;
   u.lx = Math.cos(ang);
@@ -803,8 +881,9 @@ function towerCovering(p: Vec, towerTeam: Team, pad = 0): Unit | null {
 }
 
 // ================= abilities =================
-function abilityDamage(u: Unit, a: AbilityDef): number {
-  return a.base + a.perLvl * (u.champ!.level - 1) + a.adR * u.ad + a.apR * u.ap;
+function abilityDamage(u: Unit, a: AbilityDef, slot: number): number {
+  const rank = Math.max(1, u.champ!.ranks[slot]);
+  return (a.base + a.perLvl * (u.champ!.level - 1)) * rankMul(slot, rank) + a.adR * u.ad + a.apR * u.ap;
 }
 
 function hitEnemy(u: Unit, e: Unit, a: AbilityDef, dmg: number) {
@@ -824,14 +903,16 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
   const c = u.champ!;
   const a = c.def.abilities[slot];
   if (u.dead || u.stunT > 0 || c.cds[slot] > 0 || c.dash) return false;
-  if (slot === 3 && c.level < 6) return false;
+  if (c.ranks[slot] === 0 || u.mp < a.cost) return false;
+  u.mp -= a.cost;
+  u.revealT = 1.2;
   c.recallT = 0;
   const dx = tx - u.x;
   const dy = ty - u.y;
   const d = Math.hypot(dx, dy) || 1;
   const nx = dx / d;
   const ny = dy / d;
-  const dmg = abilityDamage(u, a);
+  const dmg = abilityDamage(u, a, slot);
   if (a.kind !== 'buff' && !a.selfCenter) u.face = Math.atan2(ny, nx);
   u.act = `cast${slot}`;
   u.actN++;
@@ -971,9 +1052,11 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
   const castVol = u === G.player ? 1 : 0.6;
   sfx(({ bolt: 'bolt', nova: 'nova', dash: 'dash', buff: 'buff', beam: 'beamCharge' } as const)[a.kind], u, castVol);
   if (a.kind === 'bolt' && onScreen(u)) ring(u.x, u.y, u.r + 26, a.color, 0.25, 5);
-  c.cds[slot] = a.cd * (100 / (100 + c.haste));
+  c.cds[slot] = cdOf(c, slot);
   return true;
 }
+// each rank shaves 6% off the cooldown
+const cdOf = (c: Champ, slot: number) => c.def.abilities[slot].cd * (1 - 0.06 * Math.max(0, c.ranks[slot] - 1)) * (100 / (100 + c.haste));
 const beams: { sx: number; sy: number; ex: number; ey: number; w: number; t: number; color: string }[] = [];
 
 function castFlash(u: Unit, tx: number, ty: number) {
@@ -1020,13 +1103,17 @@ function spawnWave() {
   for (const team of [0, 1] as Team[]) {
     for (let lane = 0; lane < 3; lane++) {
       const poly = lanePoly(lane, team);
-      types.forEach((mt, i) => {
+      const inhibDown = G.units.some((o) => o.kind === 'tower' && o.tier === 2 && o.team !== team && o.lane === lane && o.dead);
+      const laneTypes: MinionType[] = inhibDown ? ['super', ...types.filter((t) => t !== 'siege')] : types;
+      laneTypes.forEach((mt, i) => {
         const p = pointAt(poly, Math.max(0, 300 - i * 50));
-        const stats = {
+        const STATS: Record<MinionType, { hp: number; ad: number; range: number; as: number; r: number; armor: number }> = {
           melee: { hp: 480, ad: 14, range: 90, as: 1.2, r: 18, armor: 0 },
           caster: { hp: 300, ad: 24, range: 480, as: 0.7, r: 15, armor: 0 },
           siege: { hp: 950, ad: 45, range: 300, as: 0.8, r: 24, armor: 15 },
-        }[mt];
+          super: { hp: 1700, ad: 95, range: 170, as: 0.85, r: 30, armor: 30 },
+        };
+        const stats = STATS[mt];
         G.units.push(
           makeUnit({
             kind: 'minion',
@@ -1086,6 +1173,7 @@ function updateMinion(u: Unit, dt: number) {
 }
 
 function updateTower(u: Unit, dt: number) {
+  if (u.tier === 2) return; // inhibitors don't shoot
   if (u.aggroT > 0) u.aggroT -= dt;
   const valid = (t: Unit | null): t is Unit => !!t && targetable(t) && t.team !== u.team && dist(u, t) <= u.range + t.r;
   let t: Unit | null = null;
@@ -1103,6 +1191,8 @@ function updateChamp(u: Unit, dt: number) {
   const c = u.champ!;
   for (let i = 0; i < 4; i++) c.cds[i] = Math.max(0, c.cds[i] - dt);
   for (let i = 0; i < 2; i++) c.spellCds[i] = Math.max(0, c.spellCds[i] - dt);
+  u.mp = Math.min(u.maxMp, u.mp + c.def.mpRegen * (1 + c.level * 0.06) * dt);
+  if (u.revealT > 0) u.revealT -= dt;
   c.buffs = c.buffs.filter((b) => (b.t -= dt) > 0);
   if (c.recallT > 0) {
     c.recallT -= dt;
@@ -1212,7 +1302,9 @@ function laneFront(team: Team, lane: number): Vec {
 function aiCast(u: Unit, s: number, foe: Unit) {
   const c = u.champ!;
   const a = c.def.abilities[s];
-  if (c.cds[s] > 0 || (s === 3 && c.level < 6)) return;
+  if (c.cds[s] > 0 || c.ranks[s] === 0 || u.mp < a.cost) return;
+  // keep enough mana for the ultimate when it is nearly up
+  if (s !== 3 && c.ranks[3] > 0 && c.cds[3] < 4 && u.mp - a.cost < c.def.abilities[3].cost) return;
   if (Math.random() > diffOf(u).castChance) return;
   const d = dist(u, foe);
   const fp = foe.hp / foe.maxHp;
@@ -1349,6 +1441,7 @@ function update(dt: number) {
           const b = BASES[u.team];
           u.dead = false;
           u.hp = u.maxHp;
+          u.mp = u.maxMp;
           u.x = b.x + 60;
           u.y = b.y - 60;
           u.stunT = 0;
@@ -1364,7 +1457,15 @@ function update(dt: number) {
         continue;
       }
     }
-    if (u.dead) continue;
+    if (u.dead) {
+      if (u.kind === 'tower' && u.tier === 2 && (u.reviveT -= dt) <= 0) {
+        u.dead = false;
+        u.hp = u.maxHp;
+        u.hpTrail = 1;
+        feedMsg(`${TEAM_NAME[u.team]} ${u.name} has respawned`, u.team);
+      }
+      continue;
+    }
     u.atkCd -= dt;
     if (u.slowT > 0) u.slowT -= dt;
     if (u.stunT > 0) u.stunT -= dt;
@@ -1465,7 +1566,10 @@ function update(dt: number) {
     m.x = clamp(m.x, 30, MAP - 30);
     m.y = clamp(m.y, 30, MAP - 30);
     // fountain: heal allies, burn enemies
-    if (m.champ && dist(m, BASES[m.team]) < FOUNTAIN_R) heal(m, m.maxHp * 0.15 * dt);
+    if (m.champ && dist(m, BASES[m.team]) < FOUNTAIN_R) {
+      heal(m, m.maxHp * 0.15 * dt);
+      m.mp = Math.min(m.maxMp, m.mp + m.maxMp * 0.15 * dt);
+    }
     const enemyBase = BASES[1 - m.team];
     if (dist(m, enemyBase) < FOUNTAIN_R + 120) {
       const nexus = G.units.find((n) => n.kind === 'nexus' && n.team !== m.team)!;
@@ -1613,7 +1717,7 @@ function render() {
   }
   if (!demoMode) {
     for (const t of G.units) {
-      if (t.kind !== 'tower' || t.dead || t.team === P.team) continue;
+      if (t.kind !== 'tower' || t.tier === 2 || t.dead || t.team === P.team) continue;
       if (dist(t, P) < t.range + 300) {
         const aimed = t.target === P;
         d.strokeStyle = aimed ? `rgba(255,60,60,${0.7 + 0.25 * Math.sin(now * 10)})` : 'rgba(255,90,90,0.4)';
@@ -1683,8 +1787,10 @@ function render() {
   for (const u of G.units) {
     if ((u.kind !== 'tower' && u.kind !== 'nexus') || u.dead || !visible(u)) continue;
     const col = TEAM_COLOR[u.team];
-    const s = screenOf(u.x, u.y, u.kind === 'tower' ? 282 : 170);
-    if (u.kind === 'tower') {
+    const inhib = u.kind === 'tower' && u.tier === 2;
+    const s = screenOf(u.x, u.y, inhib ? 120 : u.kind === 'tower' ? 282 : 170);
+    if (inhib) drawGlow(ctx, s.x, s.y, 90 * z, col, 0.4 + 0.1 * Math.sin(now * 2 + u.id));
+    else if (u.kind === 'tower') {
       drawGlow(ctx, s.x, s.y, (46 + 30 * u.lunge) * z, col, 0.45 + 0.15 * Math.sin(now * 3 + u.id) + 0.4 * u.lunge);
       if (u.target && targetable(u.target)) {
         const t = screenOf(u.target.x, u.target.y, unitHeight(u.target) * 0.5);
@@ -1767,6 +1873,10 @@ function render() {
     const w = 104 * ui;
     const col = u === P && !demoMode ? '#4fd34a' : u.team === P.team ? '#4a9cff' : '#e8473c';
     hpBar(s.x + 11, s.y, w, 11, u.hp / u.maxHp, u.hpTrail, col, u.maxHp);
+    ctx.fillStyle = 'rgba(6,8,10,0.92)';
+    ctx.fillRect(s.x + 11 - w / 2 - 2, s.y + 13, w + 4, 5);
+    ctx.fillStyle = '#3d8bff';
+    ctx.fillRect(s.x + 11 - w / 2, s.y + 14, w * clamp(u.mp / (u.maxMp || 1), 0, 1), 3);
     // level badge
     const bx = s.x + 11 - w / 2 - 22;
     ctx.fillStyle = '#0b0f14';
@@ -1878,7 +1988,7 @@ function setText(el: HTMLElement, key: string, v: string) {
   hudCache.set(key, v);
   el.textContent = v;
 }
-let slotEls: { cd: HTMLElement; cdt: HTMLElement; root: HTMLElement }[] = [];
+let slotEls: { cd: HTMLElement; cdt: HTMLElement; root: HTMLElement; pips: HTMLElement | null }[] = [];
 
 function buildHud() {
   hudCache.clear();
@@ -1896,9 +2006,17 @@ function buildHud() {
     const el = document.createElement('div');
     el.className = 'slot' + (i > 3 ? ' spell' : '');
     el.title = `${d.name} (${keys[i]}) — ${d.desc} Cooldown ${d.cd}s`;
-    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)">${i > 3 ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>`;
+    const cost = i < 4 ? c.def.abilities[i].cost : 0;
+    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)">${i > 3 ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>${
+      i < 4 ? `<span class="mana">${cost}</span><div class="pips"></div><button class="plus" title="Learn (Ctrl+${keys[i]})">+</button>` : ''
+    }`;
+    if (i < 4)
+      el.querySelector('.plus')!.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rankUp(G.player, i);
+      });
     ab.appendChild(el);
-    slotEls.push({ root: el, cd: el.querySelector('.cd')!, cdt: el.querySelector('.cdt')! });
+    slotEls.push({ root: el, cd: el.querySelector('.cd')!, cdt: el.querySelector('.cdt')!, pips: el.querySelector<HTMLElement>('.pips') });
   });
   paintPortrait();
   buildTouch();
@@ -1948,14 +2066,26 @@ function updateHud() {
   $('hptrail').style.transform = `scaleX(${clamp(P.hp / P.maxHp, 0, 1)})`;
   setText($('shopgold'), 'sgold', `${gold} gold`);
   const all = [...c.cds, ...c.spellCds];
-  const maxes = [...c.def.abilities.map((a) => a.cd * (100 / (100 + c.haste))), 180, 150];
+  const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), 180, 150];
   slotEls.forEach((s, i) => {
     const v = all[i];
     readyFlash(s.root, 'slot' + i, v);
-    s.cd.style.height = `${v > 0 ? (v / maxes[i]) * 100 : 0}%`;
+    s.cd.style.height = `${v > 0 ? clamp(v / maxes[i], 0, 1) * 100 : 0}%`;
     setText(s.cdt, 'cdt' + i, v > 0 ? String(Math.ceil(v)) : '');
-    s.root.classList.toggle('locked', i === 3 && c.level < 6);
+    if (i < 4) {
+      s.root.classList.toggle('locked', c.ranks[i] === 0);
+      s.root.classList.toggle('nomana', c.ranks[i] > 0 && P.mp < c.def.abilities[i].cost);
+      s.root.classList.toggle('learn', canRank(c, i));
+      const max = i === 3 ? 3 : 5;
+      const pips = Array.from({ length: max }, (_, k) => `<i class="${k < c.ranks[i] ? 'on' : ''}"></i>`).join('');
+      if (s.pips && hudCache.get('pips' + i) !== pips) {
+        hudCache.set('pips' + i, pips);
+        s.pips.innerHTML = pips;
+      }
+    }
   });
+  $('mpfill').style.transform = `scaleX(${clamp(P.mp / (P.maxMp || 1), 0, 1)})`;
+  setText($('mptext'), 'mp', `${Math.floor(P.mp)} / ${Math.round(P.maxMp)}`);
   const statsHtml = `<span>AD <b>${Math.round(P.ad)}</b></span><span>AP <b>${Math.round(P.ap)}</b></span><span>Armor <b>${Math.round(P.armor)}</b></span><span>MR <b>${Math.round(P.mr)}</b></span><span>AS <b>${effAS(P).toFixed(2)}</b></span><span>MS <b>${Math.round(effMS(P) || P.ms)}</b></span>`;
   if (hudCache.get('statsHtml') !== statsHtml) {
     hudCache.set('statsHtml', statsHtml);
@@ -2123,10 +2253,17 @@ window.addEventListener('keydown', (e) => {
   }
   if (P.dead) return;
   const slot = ['q', 'w', 'e', 'r'].indexOf(k);
+  if (slot >= 0 && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    rankUp(P, slot);
+    return;
+  }
   if (slot >= 0) {
     if (!cast(P, slot, w.x, w.y)) {
       sfx('nope');
-      if (slot === 3 && c.level < 6) addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+      const a = c.def.abilities[slot];
+      if (c.ranks[slot] === 0) addText(P.x, P.y - 60, canRank(c, slot) ? 'Learn it first (Ctrl+key)' : slot === 3 ? 'Learn at level 6' : 'Not learned', '#aaa', 14);
+      else if (P.mp < a.cost && c.cds[slot] <= 0) addText(P.x, P.y - 60, 'Not enough mana', '#6fb0ff', 14);
     }
     return;
   }
@@ -2243,7 +2380,9 @@ function touchCast(slot: number, at: Vec) {
   if (slot === 4) castFlash(P, at.x, at.y);
   else if (!cast(P, slot, at.x, at.y)) {
     sfx('nope');
-    if (slot === 3 && P.champ!.level < 6) addText(P.x, P.y - 60, 'Unlocks at level 6', '#aaa', 14);
+    const c = P.champ!;
+    if (c.ranks[slot] === 0) addText(P.x, P.y - 60, canRank(c, slot) ? 'Tap + to learn it' : slot === 3 ? 'Learn at level 6' : 'Not learned', '#aaa', 14);
+    else if (P.mp < c.def.abilities[slot].cost && c.cds[slot] <= 0) addText(P.x, P.y - 60, 'Not enough mana', '#6fb0ff', 14);
   }
 }
 
@@ -2353,7 +2492,16 @@ function buildTouch() {
   for (const b of touchBtns) {
     const el = document.createElement('div');
     el.className = `tbtn tb-${b.id}`;
-    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)"></div><span class="lbl">${b.label}</span><div class="cd"></div><div class="cdt"></div>`;
+    const rs = ['q', 'w', 'e', 'r'].indexOf(b.id);
+    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)"></div><span class="lbl">${b.label}</span><div class="cd"></div><div class="cdt"></div>${
+      rs >= 0 ? '<div class="tplus">+</div>' : ''
+    }`;
+    if (rs >= 0)
+      el.querySelector('.tplus')!.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (running) rankUp(G.player, rs);
+      });
     wrap.appendChild(el);
     b.el = el;
     b.cd = el.querySelector<HTMLElement>('.cd')!;
@@ -2418,21 +2566,26 @@ function updateTouchHud() {
   if (!TOUCH) return;
   const P = G.player;
   const c = P.champ!;
-  const maxes = [...c.def.abilities.map((a) => a.cd * (100 / (100 + c.haste))), 180, 150];
+  const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), 180, 150];
   const vals = [...c.cds, ...c.spellCds];
   for (const b of touchBtns) {
     const i = ['q', 'w', 'e', 'r', 'd', 'f'].indexOf(b.id);
     if (i < 0 || !b.cd || !b.cdt) continue;
     const v = vals[i];
-    b.cd.style.height = `${v > 0 ? (v / maxes[i]) * 100 : 0}%`;
+    b.cd.style.height = `${v > 0 ? clamp(v / maxes[i], 0, 1) * 100 : 0}%`;
     readyFlash(b.el!, 't' + i, v);
     setText(b.cdt, 'tcd' + i, v > 0 ? String(Math.ceil(v)) : '');
-    b.el!.classList.toggle('locked', i === 3 && c.level < 6);
+    if (i < 4) {
+      b.el!.classList.toggle('locked', c.ranks[i] === 0);
+      b.el!.classList.toggle('nomana', c.ranks[i] > 0 && P.mp < c.def.abilities[i].cost);
+      b.el!.classList.toggle('learn', canRank(c, i));
+    }
   }
   setText($('mlevel'), 'mlevel', String(c.level));
   setText($('mgold'), 'mgold', String(Math.floor(c.gold)));
   setText($('mkda'), 'mkda', `${c.kills}/${c.deaths}/${c.assists} · CS ${c.cs}`);
   $('mhpfill').style.transform = `scaleX(${clamp(P.hp / P.maxHp, 0, 1)})`;
+  $('mmpfill').style.transform = `scaleX(${clamp(P.mp / (P.maxMp || 1), 0, 1)})`;
 }
 
 // floating joystick

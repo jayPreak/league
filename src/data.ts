@@ -32,6 +32,7 @@ export interface AbilityDef {
   buffMs?: number;
   buffT?: number;
   heal?: number;
+  cost: number; // mana
 }
 
 export interface ChampDef {
@@ -52,6 +53,9 @@ export interface ChampDef {
   asL: number;
   ms: number;
   ranged: boolean;
+  mp: number;
+  mpL: number;
+  mpRegen: number; // per second
   abilities: AbilityDef[];
   build: string[];
 }
@@ -121,6 +125,9 @@ export const CHAMPS: ChampDef[] = [
     asL: 0.02,
     ms: 335,
     ranged: true,
+    mp: 420,
+    mpL: 28,
+    mpRegen: 8,
     build: ['boots', 'tome', 'crown', 'tome', 'gem', 'crown', 'plate'],
     abilities: [
       {
@@ -134,6 +141,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 0.7,
         dmgType: 'magic',
+        cost: 50,
         color: '#b78cff',
         width: 70,
         speed: 1500,
@@ -149,6 +157,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 0.6,
         dmgType: 'magic',
+        cost: 70,
         color: '#7ad7ff',
         radius: 230,
         delay: 0.6,
@@ -166,6 +175,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 0,
         dmgType: 'magic',
+        cost: 60,
         color: '#e3d0ff',
         speed: 4000,
       },
@@ -180,6 +190,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 1.0,
         dmgType: 'magic',
+        cost: 100,
         color: '#ffe27a',
         width: 140,
         delay: 0.9,
@@ -204,6 +215,9 @@ export const CHAMPS: ChampDef[] = [
     asL: 0.025,
     ms: 345,
     ranged: false,
+    mp: 300,
+    mpL: 40,
+    mpRegen: 7,
     build: ['boots', 'sword', 'edge', 'plate', 'blade', 'plate', 'edge'],
     abilities: [
       {
@@ -217,6 +231,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 0,
         dmgType: 'phys',
+        cost: 30,
         color: '#ff5a3c',
         buffAs: 0.6,
         buffMs: 0.25,
@@ -233,6 +248,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0.9,
         apR: 0,
         dmgType: 'phys',
+        cost: 40,
         color: '#ffb36b',
         radius: 300,
         delay: 0.15,
@@ -250,6 +266,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0.6,
         apR: 0,
         dmgType: 'phys',
+        cost: 45,
         color: '#ffd29a',
         speed: 1500,
         stun: 0.6,
@@ -265,6 +282,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 1.2,
         apR: 0,
         dmgType: 'phys',
+        cost: 100,
         color: '#c8823c',
         radius: 340,
         delay: 0.5,
@@ -290,6 +308,9 @@ export const CHAMPS: ChampDef[] = [
     asL: 0.03,
     ms: 330,
     ranged: true,
+    mp: 340,
+    mpL: 35,
+    mpRegen: 7,
     build: ['boots', 'dagger', 'bow', 'blade', 'edge', 'bow', 'plate'],
     abilities: [
       {
@@ -303,6 +324,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 0,
         dmgType: 'phys',
+        cost: 30,
         color: '#5fe0a0',
         buffAs: 0.8,
         buffT: 4,
@@ -318,6 +340,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 1.0,
         apR: 0,
         dmgType: 'phys',
+        cost: 50,
         color: '#a6ffcf',
         width: 90,
         speed: 1800,
@@ -336,6 +359,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 0,
         apR: 0,
         dmgType: 'phys',
+        cost: 30,
         color: '#d6ffe9',
         speed: 1600,
       },
@@ -350,6 +374,7 @@ export const CHAMPS: ChampDef[] = [
         adR: 1.4,
         apR: 0,
         dmgType: 'phys',
+        cost: 100,
         color: '#7dffb8',
         width: 130,
         speed: 1700,
