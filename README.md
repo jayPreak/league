@@ -55,3 +55,17 @@ All sound is synthesized at runtime with the Web Audio API (`src/audio.ts`); the
 The match renders in 3D with Three.js: an orthographic camera tilted 56° like a MOBA camera, a painted ground texture, instanced jungle trees, rocks and brush, an animated river, and turrets, Nexus and fountains built from primitives. Ground decals (telegraphs, range rings, selection circles) are painted on a canvas laid on the ground under the units; health bars, numbers and air effects sit on a 2D overlay.
 
 Characters are the free **CC0** [KayKit Adventurers and Skeletons packs by Kay Lousberg](https://kaylousberg.com): Mage, Barbarian and Rogue for the champions, skeleton warriors, mages and brutes for team-coloured minions. All share one rig, so `scripts/prune-models.mjs` ships the meshes without animations plus two small clip libraries (1.8 MB total, meshopt-compressed). No Riot assets are used.
+
+## Co-op multiplayer (PvE)
+
+Up to 3 players team up on Blue against Red bots.
+
+1. One player picks a champion and clicks **Create co-op lobby**. They get a 5-letter code and a **Copy invite link** button.
+2. Friends type the code and click **Join**, or just open the invite link (`?lobby=CODE`).
+3. Everyone picks a champion. The host chooses the difficulty and clicks **Start match**. Empty slots are filled by bots.
+
+How it works: the host's browser runs the whole match. Guests connect to it directly over WebRTC (PeerJS; the lobby code is the host's id on the free PeerJS signalling server, so there is no game server). Guests send their inputs as commands, and the host sends a snapshot of the match 15 times a second, along with the sounds, particles and announcements it made. If a guest leaves, a bot takes over their champion; if the host leaves, the match ends for everyone. The host should keep the game tab in front: a background tab only updates about once a second.
+
+## LoL systems
+
+Mana with per-ability costs, ability ranks (one point per level, R at 6/11/16; **Ctrl+Q/W/E/R** or the **+** button), inhibitors that respawn after 150 seconds, two Nexus turrets, and super minions in a lane whose enemy inhibitor is down.

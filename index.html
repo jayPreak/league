@@ -81,6 +81,23 @@
       <div id="champs"></div>
       <div id="diff"></div>
       <button id="play" disabled>Pick a champion</button>
+      <div id="mp">
+        <input id="pname" maxlength="16" aria-label="Your name" spellcheck="false" />
+        <button id="create">Create co-op lobby</button>
+        <span class="or">or</span>
+        <input id="code" maxlength="5" placeholder="CODE" aria-label="Lobby code" autocomplete="off" spellcheck="false" />
+        <button id="join">Join</button>
+      </div>
+      <div id="lobby" class="hidden">
+        <div class="lhead"><span>Co-op lobby</span><b id="lcode">—</b><button id="lcopy">Copy invite link</button></div>
+        <ul id="lplayers"></ul>
+        <p id="lstatus"></p>
+        <div class="lact">
+          <button id="lstart" class="hidden">Start match</button>
+          <span id="lwait" class="hidden">Waiting for the host to start…</span>
+          <button id="lleave">Leave</button>
+        </div>
+      </div>
       <div class="toggles">
         <button id="motion" aria-pressed="false">Reduced motion: Off</button>
         <button id="mmute" aria-pressed="false">Sound: On</button>

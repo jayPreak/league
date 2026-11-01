@@ -18,21 +18,25 @@ import {
 } from './data';
 import {
   addTrauma,
-  burst,
+  burst as fxBurst,
   drawAirParticles,
   drawGlow,
   drawGroundParticles,
   ease,
   particles,
-  ring,
+  ring as fxRing,
   settings,
   setReduceMotion,
   shake,
-  spawn,
+  spawn as fxSpawn,
   updateParticles,
   updateShake,
 } from './fx';
-import { audio, setMuted, sfx } from './audio';
+import { audio, setMuted, sfx as playSfx } from './audio';
+import type { SoundName } from './audio';
+import { broadcast, cleanCode, dropGuest, hostLobby, joinLobby, leave, MAX_PLAYERS, net, sendTo, sendToHost } from './net';
+import type { Cmd, LobbyPlayer, Msg } from './net';
+import type { BurstOpts, Particle } from './fx';
 import { beginDecals, canvas3d, endDecals, HK, K, loadModels, minimapCanvas, renderPortraits, renderWorld, resetUnits, syncUnits, unitHeight } from './world3d';
 import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Team, Vec } from './data';
 
@@ -154,7 +158,9 @@ interface Pending {
   total: number;
   fn: () => void;
   draw: (ctx: CanvasRenderingContext2D, k: number) => void;
+  tele?: Tele; // what guests need to redraw the telegraph
 }
+type Tele = ['n', number, number, number, string, number] | ['b', number, number, number, number, number, string];
 interface Fx {
   x: number;
   y: number;
@@ -190,6 +196,58 @@ interface Game {
   zoom: number;
   marker: { x: number; y: number; t: number } | null;
   focus: Vec | null;
+}
+
+// ================= multiplayer relay =================
+// The host simulates; every visible effect it makes during simulation is also queued and sent to
+// guests with the next snapshot, so their particles, sounds and numbers match the host's.
+type Ev =
+  | ['b', number, number, number, BurstOpts]
+  | ['r', number, number, number, string, number, number]
+  | ['p', Partial<Particle> & Vec]
+  | ['s', SoundName, number, number, number]
+  | ['t', number, number, string, string, number]
+  | ['i', number, number, keyof typeof TIER]
+  | ['tr', number, number, number]
+  | ['f', string, Team | -1]
+  | ['a', string, 'good' | 'bad' | 'neutral', string]
+  | ['k', number, number, number]
+  | ['tv', number, number, number, string, string, number];
+let evq: Ev[] = [];
+let inSim = false; // true while the host runs simulation code whose effects guests should see
+const relaying = () => inSim && net.role === 'host';
+// run personal feedback (your level-up, your gold) without sending it to guests
+function local<T>(fn: () => T): T {
+  const was = inSim;
+  inSim = false;
+  try {
+    return fn();
+  } finally {
+    inSim = was;
+  }
+}
+const r1 = (v: number) => Math.round(v * 10) / 10;
+const r2 = (v: number) => Math.round(v * 100) / 100;
+function burst(x: number, y: number, n: number, o: BurstOpts) {
+  if (relaying()) evq.push(['b', r1(x), r1(y), n, o]);
+  fxBurst(x, y, n, o);
+}
+function ring(x: number, y: number, r: number, color: string, life = 0.45, width = 6) {
+  if (relaying()) evq.push(['r', r1(x), r1(y), r, color, life, width]);
+  fxRing(x, y, r, color, life, width);
+}
+function spawn(p: Partial<Particle> & Vec) {
+  if (relaying() && !p.home) evq.push(['p', p]);
+  return fxSpawn(p);
+}
+const PERSONAL_SFX = new Set<SoundName>(['coin', 'levelUp', 'heal', 'recall', 'recallDone', 'nope', 'click', 'buy', 'good', 'bad', 'victory', 'defeat']);
+function sfx(name: SoundName, at?: Vec, vol = 1) {
+  if (relaying() && !PERSONAL_SFX.has(name)) evq.push(['s', name, at ? r1(at.x) : 0, at ? r1(at.y) : 0, at ? vol : -vol]);
+  playSfx(name, at, vol);
+}
+function trauma(at: Vec, amt: number) {
+  if (relaying()) evq.push(['tr', r1(at.x), r1(at.y), amt]);
+  if (nearMe(at)) addTrauma(amt);
 }
 
 // ================= helpers =================
@@ -369,7 +427,12 @@ function makeChamp(def: ChampDef, team: Team, lane: number, isPlayer: boolean): 
   return u;
 }
 
-function newGame(champId: string) {
+interface Human {
+  peer: string; // 'host' for the local player
+  name: string;
+  pick: string;
+}
+function newGame(champId: string, humans: Human[] = []) {
   NEXT_ID = 1;
   firstBlood = true;
   streak = 0;
@@ -442,9 +505,24 @@ function newGame(champId: string) {
     );
   }
   const pick = CHAMPS.find((c) => c.id === champId)!;
-  const allies = CHAMPS.filter((c) => c.id !== champId);
   const player = makeChamp(pick, 0, 1, true);
-  units.push(player, makeChamp(allies[0], 0, 0, false), makeChamp(allies[1], 0, 2, false));
+  units.push(player);
+  // remote humans take the side lanes; bots fill the rest with champions nobody picked
+  remote.clear();
+  const others = humans.filter((h) => h.peer !== 'host');
+  const taken = [champId, ...others.map((h) => h.pick)];
+  const spare = [...CHAMPS.filter((c) => !taken.includes(c.id)), ...CHAMPS];
+  [0, 2].forEach((lane, i) => {
+    const h = others[i];
+    if (h) {
+      const u = makeChamp(CHAMPS.find((c) => c.id === h.pick) ?? CHAMPS[i], 0, lane, true);
+      u.name = h.name;
+      remote.set(h.peer, u);
+      units.push(u);
+    } else units.push(makeChamp(spare.shift()!, 0, lane, false));
+  });
+  const me = humans.find((h) => h.peer === 'host');
+  if (me) player.name = me.name;
   const foes = [...CHAMPS].sort(() => Math.random() - 0.5);
   foes.forEach((d, lane) => units.push(makeChamp(d, 1, lane, false)));
 
@@ -504,6 +582,7 @@ function effMS(u: Unit): number {
 }
 
 function addText(x: number, y: number, text: string, color: string, size = 15) {
+  if (relaying()) evq.push(['t', r1(x), r1(y), text, color, size]);
   if (G.texts.length > 80) G.texts.shift();
   G.texts.push({ x, y, vx: (Math.random() - 0.5) * 60, text, color, t: 1, size });
 }
@@ -515,10 +594,13 @@ function addFx(x: number, y: number, r: number, color: string, max = 0.4) {
 let hitStop = 0; // real seconds of frozen simulation
 let slowmo = 0; // real seconds of 30% speed
 let hurt = 0; // red screen-edge pulse when the player takes a big hit
-const onScreen = (p: Vec) => !!G && dist(p, G.cam) < 1300 / G.zoom;
+const nearMe = (p: Vec) => !!G && dist(p, G.cam) < 1300 / G.zoom;
+// effects are created if anyone could see them: the host camera or any remote player's champion
+const onScreen = (p: Vec) => nearMe(p) || (net.role === 'host' && remoteUnits().some((u) => dist(p, u) < 1400));
 const TIER = { small: 0.12, medium: 0.3, large: 0.62 };
 function impact(at: Vec, tier: keyof typeof TIER) {
-  if (onScreen(at)) addTrauma(TIER[tier]);
+  if (relaying()) evq.push(['i', r1(at.x), r1(at.y), tier]);
+  if (nearMe(at)) addTrauma(TIER[tier]);
 }
 function freeze(sec: number) {
   if (!settings.reduceMotion) hitStop = Math.max(hitStop, sec);
@@ -546,6 +628,7 @@ let firstBlood = true;
 let lastPlayerKill = -99;
 let streak = 0;
 function announce(text: string, tone: 'good' | 'bad' | 'neutral', sub = '') {
+  if (relaying()) evq.push(['a', text, tone, sub]);
   if (!running) return;
   const el = $('announce');
   el.className = `show ${tone}`;
@@ -589,10 +672,14 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType): number {
       }
     }
   }
+  // damage numbers are personal: each player sees what they deal and take
   const P = G.player;
-  if ((src === P || t === P) && dmg >= 1) {
-    const col = t === P ? '#ff6b6b' : type === 'magic' ? '#c69bff' : type === 'true' ? '#ffffff' : '#ffd27a';
-    addText(t.x, t.y - t.r - 14, String(Math.round(dmg)), col, t.kind === 'champ' ? 17 : 13);
+  for (const v of [P, ...remoteUnits()]) {
+    if ((src !== v && t !== v) || dmg < 1) continue;
+    const col = t === v ? '#ff6b6b' : type === 'magic' ? '#c69bff' : type === 'true' ? '#ffffff' : '#ffd27a';
+    const size = t.kind === 'champ' ? 17 : 13;
+    if (v === P) local(() => addText(t.x, t.y - t.r - 14, String(Math.round(dmg)), col, size));
+    else if (relaying()) evq.push(['tv', v.id, r1(t.x), r1(t.y - t.r - 14), String(Math.round(dmg)), col, size]);
   }
   if (t.hp <= 0) kill(t, src);
   return dmg;
@@ -610,10 +697,11 @@ function rankUp(u: Unit, slot: number): boolean {
   const c = u.champ!;
   if (!canRank(c, slot)) return false;
   c.ranks[slot]++;
-  if (G && u === G.player) {
-    sfx('click');
-    if (slot === 3 && c.ranks[3] === 1) feedMsg('Ultimate learned! Press R.', -1);
-  }
+  if (G && u === G.player)
+    local(() => {
+      sfx('click');
+      if (slot === 3 && c.ranks[3] === 1) feedMsg('Ultimate learned! Press R.', -1);
+    });
   return true;
 }
 // Bots take Q, W, E once, then R whenever possible, then max their first ability.
@@ -639,7 +727,14 @@ function gainXp(u: Unit, amt: number) {
       for (let i = 0; i < 14; i++)
         spawn({ kind: 'ember', x: u.x + (Math.random() - 0.5) * 50, y: u.y + 10, vy: -220 - Math.random() * 200, life: 0.8, size: 4, color: '#ffd76a', drag: 1.5 });
     }
-    if (u === G.player) {
+    if (u === G.player) local(() => levelUpFx(u));
+  }
+  if (!c.isPlayer) autoRank(u);
+}
+function levelUpFx(u: Unit) {
+  const c = u.champ!;
+  {
+    {
       const pt = $('portrait');
       pt.classList.remove('lvlup');
       void pt.offsetWidth;
@@ -649,14 +744,13 @@ function gainXp(u: Unit, amt: number) {
       if (c.level === 6) feedMsg(TOUCH ? 'Ultimate ready to learn: tap + on it.' : 'Ultimate ready to learn: Ctrl+R or click +.', -1);
     }
   }
-  if (!c.isPlayer) autoRank(u);
 }
 const xpNeed = (lvl: number) => 180 + lvl * 100;
 
 function giveGold(u: Unit, amt: number) {
   amt = Math.round(amt * diffOf(u).gold);
   u.champ!.gold += amt;
-  if (u === G.player) addText(u.x, u.y - 50, `+${amt}g`, '#ffd700', 14);
+  if (u === G.player) local(() => addText(u.x, u.y - 50, `+${amt}g`, '#ffd700', 14));
 }
 
 function deathFx(t: Unit) {
@@ -685,8 +779,26 @@ function deathFx(t: Unit) {
   } else {
     burst(t.x, t.y, 60, { kind: 'ember', color: col, speed: 900, life: 1.2, size: 8, drag: 1.6 });
     ring(t.x, t.y, 520, '#ffe27a', 1, 16);
-    addTrauma(0.9);
+    trauma(t, 0.9);
   }
+}
+
+// Kill announcements are personal ("You have slain…"), so guests rebuild them from the kill event.
+function announceKill(killer: Unit, t: Unit, first: boolean) {
+  const P = G.player;
+  if (killer === P) {
+    streak = G.t - lastPlayerKill < 10 ? streak + 1 : 1;
+    lastPlayerKill = G.t;
+    const multi = ['', '', 'Double Kill', 'Triple Kill', 'Quadra Kill', 'Penta Kill'][Math.min(streak, 5)];
+    announce(first ? 'First Blood' : multi || 'You have slain an enemy', 'good', first ? `${t.name} has fallen` : '');
+    freeze(0.09);
+  } else if (t === P) {
+    announce('You have been slain', 'bad', `by ${killer.name}`);
+    freeze(0.07);
+  } else if (first) announce('First Blood', killer.team === P.team ? 'good' : 'bad', `${killer.name} slew ${t.name}`);
+  else if (killer.team === P.team) announce('An enemy has been slain', 'good');
+  else announce('An ally has been slain', 'bad');
+  feedMsg(`${killer.name}${killer === G.player ? ' (you)' : ''} slew ${t.name}${t === G.player ? ' (you)' : ''}`, killer.team);
 }
 
 function kill(t: Unit, src: Unit) {
@@ -733,21 +845,10 @@ function kill(t: Unit, src: Unit) {
         }
       }
       for (const f of foes) gainXp(f, (140 + 30 * c.level) / Math.max(1, foes.length * 0.75));
-      const P = G.player;
-      if (killer === P) {
-        streak = G.t - lastPlayerKill < 10 ? streak + 1 : 1;
-        lastPlayerKill = G.t;
-        const multi = ['', '', 'Double Kill', 'Triple Kill', 'Quadra Kill', 'Penta Kill'][Math.min(streak, 5)];
-        announce(firstBlood ? 'First Blood' : multi || 'You have slain an enemy', 'good', firstBlood ? `${t.name} has fallen` : '');
-        freeze(0.09);
-      } else if (t === P) {
-        announce('You have been slain', 'bad', `by ${killer.name}`);
-        freeze(0.07);
-      } else if (firstBlood) announce('First Blood', killer.team === P.team ? 'good' : 'bad', `${killer.name} slew ${t.name}`);
-      else if (killer.team === P.team) announce('An enemy has been slain', 'good');
-      else announce('An ally has been slain', 'bad');
+      if (relaying()) evq.push(['k', killer.id, t.id, firstBlood ? 1 : 0]);
+      const fb = firstBlood;
+      local(() => announceKill(killer!, t, fb));
       firstBlood = false;
-      feedMsg(`${killer.name}${killer === G.player ? ' (you)' : ''} slew ${t.name}${t === G.player ? ' (you)' : ''}`, killer.team);
     } else feedMsg(`${t.name} was executed`, (1 - t.team) as Team);
     c.damagers.clear();
   } else if (t.kind === 'tower') {
@@ -773,7 +874,7 @@ function kill(t: Unit, src: Unit) {
           burst(x, y, 30, { kind: 'ember', color: TEAM_COLOR[t.team], speed: 700, life: 0.9, size: 6, drag: 2 });
           burst(x, y, 24, { color: '#fff3c4', speed: 900, life: 0.5, size: 4 });
           ring(x, y, 260, '#ffe27a', 0.7, 12);
-          addTrauma(0.45);
+          trauma(t, 0.45);
         },
         draw: () => {},
       });
@@ -968,18 +1069,9 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
         draw: (ctx, k) => {
           const px = a.selfCenter ? u.x : cx;
           const py = a.selfCenter ? u.y : cy;
-          ctx.strokeStyle = a.color;
-          ctx.fillStyle = a.color + '22';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(px, py, rad, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = a.color + '44';
-          ctx.beginPath();
-          ctx.arc(px, py, rad * k, 0, Math.PI * 2);
-          ctx.fill();
+          drawNovaTele(ctx, px, py, rad, a.color, k);
         },
+        tele: ['n', r1(cx), r1(cy), rad, a.color, a.selfCenter ? u.id : 0],
       });
       break;
     }
@@ -1025,26 +1117,14 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
           G.fx.push({ x: sx, y: sy, r: -1, t: 0, max: 0.5, color: a.color });
           beams.push({ sx, sy, ex, ey, w, t: 0.5, color: a.color });
           sfx('beam', { x: (sx + ex) / 2, y: (sy + ey) / 2 });
-          if (onScreen({ x: sx, y: sy })) addTrauma(u === G.player ? 0.5 : 0.3);
+          trauma({ x: sx, y: sy }, u === G.player ? 0.5 : 0.3);
           for (let i = 0; i < 40; i++) {
             const k = Math.random();
             spawn({ kind: 'ember', x: sx + (ex - sx) * k + (Math.random() - 0.5) * w * 0.6, y: sy + (ey - sy) * k + (Math.random() - 0.5) * w * 0.6, vx: (Math.random() - 0.5) * 120, vy: (Math.random() - 0.5) * 120, life: 0.6, size: 6, color: a.color, drag: 2 });
           }
         },
-        draw: (ctx, k) => {
-          ctx.strokeStyle = a.color + '55';
-          ctx.lineWidth = w;
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-          ctx.strokeStyle = a.color + 'aa';
-          ctx.lineWidth = w * k;
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
-        },
+        draw: (ctx, k) => drawBeamTele(ctx, sx, sy, ex, ey, w, a.color, k),
+        tele: ['b', r1(sx), r1(sy), r1(ex), r1(ey), w, a.color],
       });
       break;
     }
@@ -2013,7 +2093,7 @@ function buildHud() {
     if (i < 4)
       el.querySelector('.plus')!.addEventListener('click', (e) => {
         e.stopPropagation();
-        rankUp(G.player, i);
+        if (canRank(G.player.champ!, i)) command({ c: 'rank', s: i });
       });
     ab.appendChild(el);
     slotEls.push({ root: el, cd: el.querySelector('.cd')!, cdt: el.querySelector('.cdt')!, pips: el.querySelector<HTMLElement>('.pips') });
@@ -2112,6 +2192,7 @@ function updateHud() {
 }
 
 function feedMsg(text: string, team: Team | -1) {
+  if (relaying()) evq.push(['f', text, team]);
   const el = document.createElement('div');
   el.textContent = text;
   if (team !== -1) el.className = team === 0 ? 'b' : 'r';
@@ -2152,18 +2233,27 @@ function toggleShop(force?: boolean) {
     renderShop();
   }
 }
+function canBuy(u: Unit, id: string): boolean {
+  const it = ITEM_MAP[id];
+  const c = u.champ!;
+  const inShop = u.dead || dist(u, BASES[u.team]) < FOUNTAIN_R + 60;
+  return !!it && inShop && c.gold >= it.cost && c.items.length < 6 && !(it.unique && c.items.includes(it.id));
+}
+function buyItem(u: Unit, id: string) {
+  if (!canBuy(u, id)) return;
+  const c = u.champ!;
+  c.gold -= ITEM_MAP[id].cost;
+  c.items.push(id);
+  recalc(u);
+}
 $('shopgrid').addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest('button');
   if (!btn || btn.disabled) return;
-  const it = ITEM_MAP[btn.dataset.id!];
-  const c = G.player.champ!;
-  if (!canShop() || c.gold < it.cost || c.items.length >= 6 || (it.unique && c.items.includes(it.id))) return;
-  c.gold -= it.cost;
-  c.items.push(it.id);
+  if (!canBuy(G.player, btn.dataset.id!)) return;
+  command({ c: 'buy', item: btn.dataset.id! });
   lastBuyAt = performance.now();
   sfx('buy');
   btn.classList.add('bought');
-  recalc(G.player);
   hudCache.delete('shop');
   renderShop();
 });
@@ -2177,12 +2267,12 @@ function issueClick() {
   const P = G.player;
   if (P.dead || G.over !== null) return;
   const c = P.champ!;
+  void c;
   const t = hoverUnit();
-  c.recallT = 0;
-  if (t) c.order = { type: 'attack', target: t };
+  if (t) command({ c: 'attack', id: t.id });
   else {
     const w = toWorld(mouse.x, mouse.y);
-    c.order = { type: 'move', x: clamp(w.x, 30, MAP - 30), y: clamp(w.y, 30, MAP - 30) };
+    command({ c: 'move', x: w.x, y: w.y });
     G.marker = { x: w.x, y: w.y, t: 0.5 };
   }
 }
@@ -2193,7 +2283,7 @@ canvas.addEventListener('pointerdown', (e) => {
   mouse = { x: e.clientX, y: e.clientY };
   if (e.pointerType === 'touch') {
     const t = hoverUnit(40);
-    if (t && !G.player.dead) G.player.champ!.order = { type: 'attack', target: t };
+    if (t && !G.player.dead) command({ c: 'attack', id: t.id });
     return;
   }
   mouseHeld = true;
@@ -2222,10 +2312,8 @@ mini.addEventListener('pointerdown', (e) => {
   const wx = ((e.clientX - r.left) / r.width) * MAP;
   const wy = ((e.clientY - r.top) / r.height) * MAP;
   if (e.button === 2 || G.camLocked) {
-    const c = G.player.champ!;
     if (!G.player.dead) {
-      c.recallT = 0;
-      c.order = { type: 'move', x: wx, y: wy };
+      command({ c: 'move', x: wx, y: wy });
       G.marker = { x: wx, y: wy, t: 0.5 };
     }
   } else {
@@ -2251,15 +2339,16 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
-  if (P.dead) return;
   const slot = ['q', 'w', 'e', 'r'].indexOf(k);
   if (slot >= 0 && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
-    rankUp(P, slot);
+    if (canRank(c, slot)) command({ c: 'rank', s: slot });
     return;
   }
+  if (P.dead) return;
   if (slot >= 0) {
-    if (!cast(P, slot, w.x, w.y)) {
+    if (castReady(P, slot)) command({ c: 'cast', s: slot, x: w.x, y: w.y });
+    else {
       sfx('nope');
       const a = c.def.abilities[slot];
       if (c.ranks[slot] === 0) addText(P.x, P.y - 60, canRank(c, slot) ? 'Learn it first (Ctrl+key)' : slot === 3 ? 'Learn at level 6' : 'Not learned', '#aaa', 14);
@@ -2267,13 +2356,10 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (k === 'd') castFlash(P, w.x, w.y);
-  else if (k === 'f') castHeal(P);
-  else if (k === 'b') startRecall(P);
-  else if (k === 's') {
-    c.order = null;
-    c.recallT = 0;
-  }
+  if (k === 'd') command({ c: 'flash', x: w.x, y: w.y });
+  else if (k === 'f') command({ c: 'heal' });
+  else if (k === 'b') command({ c: 'recall' });
+  else if (k === 's') command({ c: 'stop' });
 });
 
 function edgePan(dt: number) {
@@ -2297,6 +2383,8 @@ if (TOUCH) document.body.classList.add('touch');
 const AIM_DEAD = 16; // px of drag before a press becomes an aimed cast
 const AIM_MAX = 80; // px of drag that maps to full range
 const joy = { id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
+let joySend = 0;
+let joyMoving = false;
 let facing: Vec = { x: 0.7071, y: -0.7071 };
 let attackHeld: 'any' | 'minion' | 'tower' | null = null;
 let attackTick = 0;
@@ -2377,8 +2465,9 @@ function quickTarget(slot: number): Vec {
 
 function touchCast(slot: number, at: Vec) {
   const P = G.player;
-  if (slot === 4) castFlash(P, at.x, at.y);
-  else if (!cast(P, slot, at.x, at.y)) {
+  if (slot === 4) command({ c: 'flash', x: at.x, y: at.y });
+  else if (castReady(P, slot)) command({ c: 'cast', s: slot, x: at.x, y: at.y });
+  else {
     sfx('nope');
     const c = P.champ!;
     if (c.ranks[slot] === 0) addText(P.x, P.y - 60, canRank(c, slot) ? 'Tap + to learn it' : slot === 3 ? 'Learn at level 6' : 'Not learned', '#aaa', 14);
@@ -2396,10 +2485,7 @@ function touchAttack(kind: 'any' | 'minion' | 'tower') {
       : kind === 'tower'
         ? autoTarget(radius + 300, (u) => u.kind === 'tower' || u.kind === 'nexus')
         : autoTarget(radius);
-  if (t) {
-    P.champ!.order = { type: 'attack', target: t };
-    P.champ!.recallT = 0;
-  }
+  if (t) command({ c: 'attack', id: t.id });
 }
 
 // Called every frame before update().
@@ -2412,9 +2498,18 @@ function touchTick(dt: number) {
     const gy = joy.dy / K;
     const gm = Math.hypot(joy.dx, gy);
     facing = { x: joy.dx / gm, y: gy / gm };
-    c.order = { type: 'move', x: clamp(P.x + facing.x * 160, 30, MAP - 30), y: clamp(P.y + facing.y * 160, 30, MAP - 30) };
-    c.recallT = 0;
+    void c;
+    // guests send the joystick ten times a second; the host applies it every frame
+    if (net.role !== 'guest' || (joySend -= dt) <= 0) {
+      joySend = 0.1;
+      command({ c: 'move', x: P.x + facing.x * 160, y: P.y + facing.y * 160 });
+    }
+    joyMoving = true;
     return;
+  }
+  if (joyMoving) {
+    joyMoving = false;
+    command({ c: 'stop' });
   }
   if (attackHeld && (attackTick -= dt) <= 0) {
     attackTick = 0.25;
@@ -2500,7 +2595,7 @@ function buildTouch() {
       el.querySelector('.tplus')!.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (running) rankUp(G.player, rs);
+        if (running && canRank(G.player.champ!, rs)) command({ c: 'rank', s: rs });
       });
     wrap.appendChild(el);
     b.el = el;
@@ -2528,7 +2623,7 @@ function bindTouchBtn(b: TouchBtn) {
       attackTick = 0.25;
       touchAttack(attackHeld);
     } else if (b.id === 'f') {
-      castHeal(G.player);
+      command({ c: 'heal' });
     } else if (slot >= 0) {
       const r = el.getBoundingClientRect();
       aim = { slot, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0, aiming: false, cancel: false };
@@ -2627,14 +2722,584 @@ const joyEnd = (e: PointerEvent) => {
   joy.id = -1;
   joy.dx = joy.dy = 0;
   $('joybase').classList.remove('on');
-  const c = G?.player.champ;
-  if (c?.order?.type === 'move') c.order = null;
 };
 joyzone.addEventListener('pointerup', joyEnd);
 joyzone.addEventListener('pointercancel', joyEnd);
 $('mshop').addEventListener('click', () => toggleShop());
-$('mrecall').addEventListener('click', () => running && startRecall(G.player));
+$('mrecall').addEventListener('click', () => running && command({ c: 'recall' }));
 window.addEventListener('resize', () => TOUCH && G && layoutTouch());
+
+// ================= multiplayer: commands, snapshots, lobby =================
+const remote = new Map<string, Unit>(); // host: each guest's champion
+const remoteUnits = () => [...remote.values()];
+const castReady = (u: Unit, slot: number) => {
+  const c = u.champ!;
+  return !u.dead && u.stunT <= 0 && c.cds[slot] <= 0 && !c.dash && c.ranks[slot] > 0 && u.mp >= c.def.abilities[slot].cost;
+};
+
+// Every player action becomes a command: applied directly by the host, sent to the host by guests.
+function command(cmd: Cmd) {
+  if (!G || !running) return;
+  if (net.role === 'guest') {
+    sendToHost({ t: 'cmd', cmd });
+    return;
+  }
+  inSim = true;
+  try {
+    applyCmd(G.player, cmd);
+  } finally {
+    inSim = false;
+  }
+}
+function applyCmd(u: Unit, cmd: Cmd) {
+  const c = u.champ;
+  if (!c || G.over !== null) return;
+  switch (cmd.c) {
+    case 'move':
+      if (u.dead) return;
+      c.recallT = 0;
+      c.order = { type: 'move', x: clamp(cmd.x, 30, MAP - 30), y: clamp(cmd.y, 30, MAP - 30) };
+      break;
+    case 'attack': {
+      const t = G.units.find((o) => o.id === cmd.id);
+      if (!t || u.dead || t.team === u.team || !targetable(t)) return;
+      c.recallT = 0;
+      c.order = { type: 'attack', target: t };
+      break;
+    }
+    case 'cast':
+      cast(u, cmd.s, cmd.x, cmd.y);
+      break;
+    case 'flash':
+      castFlash(u, cmd.x, cmd.y);
+      break;
+    case 'heal':
+      castHeal(u);
+      break;
+    case 'recall':
+      startRecall(u);
+      break;
+    case 'stop':
+      c.order = null;
+      c.recallT = 0;
+      break;
+    case 'rank':
+      rankUp(u, cmd.s);
+      break;
+    case 'buy':
+      buyItem(u, cmd.item);
+      break;
+  }
+}
+
+// ---- host -> guest snapshots ----
+const KINDS: Kind[] = ['champ', 'minion', 'tower', 'nexus'];
+type URow = [number, number, Team, number, number, number, number, number, number, number, string, number, number, number, number, string, number, number, number, number, number, number, number, number, number, number];
+type CRow = [number, string, number, number, number, string[], number[], number[], number, number, number, number, number, number[], number, number, number, string, number, number, number, number, number, number, number, number];
+type PRow = [number, number, string, number, number, number, number, number, number];
+interface Snap {
+  t: number;
+  k: [number, number];
+  o: Team | null;
+  op: number[];
+  u: URow[];
+  c: CRow[];
+  p: PRow[];
+  pd: [Tele, number, number][];
+  bm: [number, number, number, number, number, number, string][];
+  ev: Ev[];
+}
+function encodeSnap(): Snap {
+  const ev = evq;
+  evq = [];
+  return {
+    t: r2(G.t),
+    k: G.kills,
+    o: G.over,
+    op: [...G.open].map((u) => u.id),
+    u: G.units.map((u) => [
+      u.id, KINDS.indexOf(u.kind), u.team, r1(u.x), r1(u.y), Math.round(u.hp), Math.round(u.maxHp), u.dead ? 1 : 0, r2(u.face), u.actN, u.act,
+      r2(u.lunge), r2(u.hitFlash), r2(u.stunT), r2(u.slowT), u.mtype ?? '', u.tier, u.lane, u.r, Math.round(u.mp), Math.round(u.maxMp),
+      u.target && !u.target.dead ? u.target.id : 0, r2(u.pop), r2(u.fadeIn), r2(u.lx), r2(u.ly),
+    ]),
+    c: G.units
+      .filter((u) => u.champ)
+      .map((u) => {
+        const c = u.champ!;
+        return [
+          u.id, c.def.id, c.level, Math.round(c.xp), Math.floor(c.gold), c.items, c.cds.map(r1), c.spellCds.map(r1), r1(c.respawnT),
+          c.kills, c.deaths, c.assists, c.cs, c.ranks, r2(c.recallT), c.buffs.length, c.dash ? 1 : 0, u.name, c.lane,
+          Math.round(u.ad), Math.round(u.ap), Math.round(u.armor), Math.round(u.mr), r2(effAS(u)), Math.round(effMS(u) || u.ms), c.haste,
+        ];
+      }),
+    p: G.projs.map((p) => [r1(p.x), r1(p.y), p.color, p.homing?.id ?? 0, p.width, r2(p.dx), r2(p.dy), KINDS.indexOf(p.owner.kind), r1(p.max)]),
+    pd: G.pending.filter((p) => p.tele).map((p) => [p.tele!, r2(p.t), r2(p.total)]),
+    bm: beams.map((b) => [r1(b.sx), r1(b.sy), r1(b.ex), r1(b.ey), b.w, r2(b.t), b.color]),
+    ev,
+  };
+}
+
+// ---- guest side ----
+const byId = new Map<number, Unit>();
+const goal = new Map<Unit, Vec>(); // latest host position; units glide toward it
+let awaitingYou = 0;
+function drawNovaTele(ctx: CanvasRenderingContext2D, px: number, py: number, rad: number, color: string, k: number) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color + '22';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(px, py, rad, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = color + '44';
+  ctx.beginPath();
+  ctx.arc(px, py, rad * k, 0, Math.PI * 2);
+  ctx.fill();
+}
+function drawBeamTele(ctx: CanvasRenderingContext2D, sx: number, sy: number, ex: number, ey: number, w: number, color: string, k: number) {
+  ctx.strokeStyle = color + '55';
+  ctx.lineWidth = w;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  ctx.strokeStyle = color + 'aa';
+  ctx.lineWidth = w * k;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+}
+
+function newGuestGame() {
+  firstBlood = true;
+  streak = 0;
+  lastPlayerKill = -99;
+  hitStop = slowmo = hurt = 0;
+  particles.length = 0;
+  shake.trauma = 0;
+  resetUnits();
+  byId.clear();
+  goal.clear();
+}
+
+function applySnap(s: Snap) {
+  const first = awaitingYou > 0;
+  if (first) newGuestGame();
+  const seen = new Set<number>();
+  const units: Unit[] = [];
+  for (const r of s.u) {
+    const id = r[0];
+    seen.add(id);
+    let u = byId.get(id);
+    const fresh = !u;
+    if (!u) {
+      u = makeUnit({ kind: KINDS[r[1]], team: r[2], x: r[3], y: r[4] });
+      u.id = id;
+      byId.set(id, u);
+    }
+    u.hp = r[5];
+    u.maxHp = r[6];
+    u.dead = r[7] === 1;
+    u.face = r[8];
+    u.actN = r[9];
+    u.act = r[10];
+    u.lunge = r[11];
+    u.hitFlash = r[12];
+    u.stunT = r[13];
+    u.slowT = r[14];
+    u.mtype = (r[15] || null) as MinionType | null;
+    u.tier = r[16];
+    u.lane = r[17];
+    u.r = r[18];
+    u.mp = r[19];
+    u.maxMp = r[20];
+    u.pop = r[22];
+    u.fadeIn = r[23];
+    u.lx = r[24];
+    u.ly = r[25];
+    if (fresh || dist(u, { x: r[3], y: r[4] }) > 450) {
+      u.x = r[3];
+      u.y = r[4];
+    }
+    goal.set(u, { x: r[3], y: r[4] });
+    units.push(u);
+  }
+  for (const u of units) {
+    const r = s.u.find((row) => row[0] === u.id)!;
+    u.target = r[21] ? byId.get(r[21]) ?? null : null;
+  }
+  for (const [id, u] of byId)
+    if (!seen.has(id)) {
+      byId.delete(id);
+      goal.delete(u);
+    }
+  for (const r of s.c) {
+    const u = byId.get(r[0]);
+    if (!u) continue;
+    if (!u.champ) {
+      const def = CHAMPS.find((d) => d.id === r[1]) ?? CHAMPS[0];
+      u.champ = makeChamp(def, u.team, r[18], false).champ;
+      u.champ!.isPlayer = true; // never run AI on a guest
+    }
+    const c = u.champ!;
+    const was = { level: c.level, gold: c.gold, cs: c.cs };
+    c.level = r[2];
+    c.xp = r[3];
+    c.gold = r[4];
+    c.items = r[5];
+    c.cds = r[6];
+    c.spellCds = r[7];
+    c.respawnT = r[8];
+    c.kills = r[9];
+    c.deaths = r[10];
+    c.assists = r[11];
+    c.cs = r[12];
+    c.ranks = r[13];
+    c.recallT = r[14];
+    c.buffs = Array.from({ length: r[15] }, () => ({ as: 0, ms: 0, t: 1 }));
+    c.dash = r[16] ? ({} as Dash) : null;
+    u.name = r[17];
+    u.ad = r[19];
+    u.ap = r[20];
+    u.armor = r[21];
+    u.mr = r[22];
+    u.as = r[23];
+    u.ms = r[24];
+    c.haste = r[25];
+    // personal feedback the host doesn't send
+    if (!first && G && u === G.player) {
+      if (c.level > was.level) levelUpFx(u);
+      if (c.cs > was.cs) playSfx('coin');
+      if (c.gold - was.gold >= 14) addText(u.x, u.y - 50, `+${Math.round(c.gold - was.gold)}g`, '#ffd700', 14);
+    }
+  }
+  if (first) {
+    const me = byId.get(awaitingYou);
+    if (!me) return;
+    awaitingYou = 0;
+    G = {
+      t: s.t, units, projs: [], pending: [], fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
+      open: new Set(), player: me, cam: { x: me.x, y: me.y }, camLocked: true, zoom: TOUCH ? clamp(Math.min(W, H) / 700, 0.55, 1) : 1, marker: null, focus: null,
+    };
+    buildHud();
+    enterMatch();
+  }
+  const P = G.player;
+  const hpBefore = P.hp;
+  G.units = units;
+  G.t = s.t;
+  G.kills = s.k;
+  G.open = new Set(s.op.map((id) => byId.get(id)).filter((u): u is Unit => !!u));
+  if (P.hp < hpBefore - P.maxHp * 0.06) hurt = Math.min(1, hurt + 0.6);
+  G.projs = s.p.map((r) => ({
+    homing: r[3] ? byId.get(r[3]) ?? null : null, x: r[0], y: r[1], dx: r[5], dy: r[6], speed: 0, traveled: 0, max: r[8], width: r[4],
+    owner: { kind: KINDS[r[7]] } as Unit, team: 0, dmg: 0, dmgType: 'phys', pierce: false, hit: new Set(), slow: 0, slowT: 0, stun: 0,
+    champOnly: false, color: r[2], done: false,
+  }));
+  G.pending = s.pd.map(([tele, t, total]) => ({
+    t,
+    total,
+    tele,
+    fn: () => {},
+    draw: (ctx, k) => {
+      if (tele[0] === 'n') {
+        const f = tele[5] ? byId.get(tele[5]) : null;
+        drawNovaTele(ctx, f ? f.x : tele[1], f ? f.y : tele[2], tele[3], tele[4], k);
+      } else drawBeamTele(ctx, tele[1], tele[2], tele[3], tele[4], tele[5], tele[6], k);
+    },
+  }));
+  beams.length = 0;
+  for (const b of s.bm) beams.push({ sx: b[0], sy: b[1], ex: b[2], ey: b[3], w: b[4], t: b[5], color: b[6] });
+  for (const e of s.ev) replay(e);
+  if (s.o !== null && G.over === null) {
+    G.over = s.o;
+    const nexus = G.units.find((n) => n.kind === 'nexus' && n.team !== s.o);
+    if (nexus) G.focus = { x: nexus.x, y: nexus.y };
+    slowmo = settings.reduceMotion ? 0 : 2.2;
+    const ended = G;
+    setTimeout(() => {
+      if (G === ended && running) showEnd();
+    }, 1800);
+  }
+}
+
+function replay(e: Ev) {
+  switch (e[0]) {
+    case 'b':
+      if (nearMe({ x: e[1], y: e[2] })) fxBurst(e[1], e[2], e[3], e[4]);
+      break;
+    case 'r':
+      if (nearMe({ x: e[1], y: e[2] })) fxRing(e[1], e[2], e[3], e[4], e[5], e[6]);
+      break;
+    case 'p':
+      if (nearMe(e[1])) fxSpawn(e[1]);
+      break;
+    case 's':
+      playSfx(e[1], e[4] < 0 ? undefined : { x: e[2], y: e[3] }, Math.abs(e[4]));
+      break;
+    case 't':
+      if (G.texts.length > 80) G.texts.shift();
+      G.texts.push({ x: e[1], y: e[2], vx: (Math.random() - 0.5) * 60, text: e[3], color: e[4], t: 1, size: e[5] });
+      break;
+    case 'tv':
+      if (e[1] !== G.player.id) break;
+      if (G.texts.length > 80) G.texts.shift();
+      G.texts.push({ x: e[2], y: e[3], vx: (Math.random() - 0.5) * 60, text: e[4], color: e[5], t: 1, size: e[6] });
+      break;
+    case 'i':
+      if (nearMe({ x: e[1], y: e[2] })) addTrauma(TIER[e[3]]);
+      break;
+    case 'tr':
+      if (nearMe({ x: e[1], y: e[2] })) addTrauma(e[3]);
+      break;
+    case 'f':
+      feedMsg(e[1], e[2]);
+      break;
+    case 'a':
+      announce(e[1], e[2], e[3]);
+      break;
+    case 'k': {
+      const k = byId.get(e[1]);
+      const v = byId.get(e[2]);
+      if (k && v) announceKill(k, v, e[3] === 1);
+      break;
+    }
+  }
+}
+
+// Guests don't simulate: units glide to the host's positions and cosmetic timers run down.
+function guestTick(dt: number) {
+  const f = Math.min(1, dt * 14);
+  for (const [u, g] of goal) {
+    u.x += (g.x - u.x) * f;
+    u.y += (g.y - u.y) * f;
+    const frac = clamp(u.hp / u.maxHp, 0, 1);
+    u.hpTrail = frac > u.hpTrail ? frac : Math.max(frac, u.hpTrail - dt * 0.55);
+    if (u.hitFlash > 0) u.hitFlash -= dt;
+    if (u.lunge > 0) u.lunge = Math.max(0, u.lunge - dt * 5);
+    if (u.pop > 0) u.pop = Math.max(0, u.pop - dt * 5);
+    if (u.fadeIn > 0) u.fadeIn = Math.max(0, u.fadeIn - dt);
+  }
+  for (const p of G.projs) {
+    if (p.homing) {
+      const d = dist(p, p.homing) || 1;
+      const step = Math.min(d, 1300 * dt);
+      p.x += ((p.homing.x - p.x) / d) * step;
+      p.y += ((p.homing.y - p.y) / d) * step;
+    } else {
+      p.x += p.dx * 1600 * dt;
+      p.y += p.dy * 1600 * dt;
+    }
+  }
+  for (const pd of G.pending) pd.t = Math.max(0, pd.t - dt);
+  G.texts = G.texts.filter((t) => (t.t -= dt * 0.9) > 0);
+  for (const b of beams) b.t -= dt;
+  while (beams.length && beams[0].t <= 0) beams.shift();
+  if (G.marker && (G.marker.t -= dt) <= 0) G.marker = null;
+}
+
+// ---- lobby ----
+let myName = '';
+try {
+  myName = localStorage.getItem('rift-name') ?? '';
+} catch {
+  // storage unavailable
+}
+if (!myName) myName = `Summoner${Math.floor(100 + Math.random() * 900)}`;
+const lobbyStatus = (text: string, bad = false) => {
+  const el = $('lstatus');
+  el.textContent = text;
+  el.classList.toggle('bad', bad);
+};
+
+function renderLobby() {
+  const inLobby = net.role !== 'solo';
+  $('lobby').classList.toggle('hidden', !inLobby);
+  $('mp').classList.toggle('hidden', inLobby);
+  $('play').classList.toggle('hidden', inLobby);
+  $('diff').classList.toggle('locked', net.role === 'guest');
+  if (!inLobby) return;
+  $('lcode').textContent = net.code;
+  $('lplayers').innerHTML = Array.from({ length: MAX_PLAYERS }, (_, i) => {
+    const p = net.players[i];
+    if (!p) return `<li class="empty"><span class="pimg"></span><span>Open slot · a bot will play</span></li>`;
+    const def = CHAMPS.find((c) => c.id === p.pick);
+    const img = PORTRAITS[p.pick];
+    return `<li><span class="pimg" style="${img ? `background-image:url(${img})` : `background:${def?.color ?? '#333'}`}"></span><span class="pname">${escapeHtml(p.name)}${p.host ? ' <em>host</em>' : ''}</span><span class="ppick">${def ? def.name : 'Choosing…'}</span></li>`;
+  }).join('');
+  $('lstart').classList.toggle('hidden', net.role !== 'host');
+  $('lwait').classList.toggle('hidden', net.role !== 'guest');
+}
+const escapeHtml = (t: string) => t.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+
+function hostSync() {
+  if (net.role !== 'host') return;
+  net.players[0] = { id: 'host', name: myName, pick: picked, host: true };
+  broadcast({ t: 'lobby', players: net.players, diff: difficulty.id });
+  renderLobby();
+}
+
+net.onStatus = (t) => lobbyStatus(t, true);
+net.onMsg = (from, m) => {
+  if (net.role === 'host') {
+    switch (m.t) {
+      case 'hello':
+        if (!net.players.some((p) => p.id === from)) net.players.push({ id: from, name: m.name.slice(0, 16) || 'Guest', pick: m.pick, host: false });
+        hostSync();
+        if (running) sendTo(from, { t: 'lobby', players: net.players, diff: difficulty.id });
+        break;
+      case 'pick': {
+        const p = net.players.find((q) => q.id === from);
+        if (p) p.pick = m.pick;
+        hostSync();
+        break;
+      }
+      case 'cmd': {
+        const u = remote.get(from);
+        if (!u || !running) return;
+        inSim = true;
+        try {
+          applyCmd(u, m.cmd);
+        } finally {
+          inSim = false;
+        }
+        break;
+      }
+      case 'bye':
+        net.onLeave(from);
+        break;
+    }
+    return;
+  }
+  switch (m.t) {
+    case 'lobby':
+      net.players = m.players;
+      difficulty = DIFFICULTIES.find((d) => d.id === m.diff) ?? NORMAL;
+      renderLobby();
+      lobbyStatus(`Connected. ${difficulty.name} difficulty. Waiting for the host to start.`);
+      break;
+    case 'start':
+      awaitingYou = m.you;
+      lobbyStatus('Starting…');
+      break;
+    case 'snap':
+      applySnap(m.s as Snap);
+      break;
+    case 'full':
+      lobbyStatus('That lobby is full (3 players).', true);
+      leaveLobby();
+      break;
+    case 'bye':
+      net.onLeave('host');
+      break;
+  }
+};
+net.onLeave = (id) => {
+  if (net.role === 'host') {
+    const p = net.players.find((q) => q.id === id);
+    net.players = net.players.filter((q) => q.id !== id);
+    dropGuest(id);
+    const u = remote.get(id);
+    if (u && running) {
+      u.champ!.isPlayer = false; // a bot takes over the champion
+      remote.delete(id);
+      inSim = true;
+      feedMsg(`${p?.name ?? 'A player'} disconnected. A bot takes over.`, -1);
+      inSim = false;
+    }
+    hostSync();
+  } else if (net.role === 'guest' && id === 'host') {
+    leave();
+    const wasPlaying = running;
+    backToMenu();
+    lobbyStatus(wasPlaying ? 'The host left the game.' : 'The host closed the lobby.', true);
+    $('lobby').classList.remove('hidden');
+    $('lplayers').innerHTML = '';
+    $('lstart').classList.add('hidden');
+    $('lwait').classList.add('hidden');
+    $('lcode').textContent = '—';
+  }
+};
+
+async function createLobby() {
+  if (!picked) picked = CHAMPS[0].id;
+  sfx('click');
+  lobbyStatus('Creating lobby…');
+  $('lobby').classList.remove('hidden');
+  try {
+    const code = await hostLobby();
+    net.players = [];
+    hostSync();
+    lobbyStatus(`Share the code ${code} or the invite link. Up to ${MAX_PLAYERS} players.`);
+  } catch (e) {
+    lobbyStatus(`Could not create a lobby: ${(e as Error).message}`, true);
+  }
+}
+async function joinWithCode(raw: string) {
+  const code = cleanCode(raw);
+  if (code.length !== 5) {
+    lobbyStatus('Lobby codes are 5 letters.', true);
+    $('lobby').classList.remove('hidden');
+    return;
+  }
+  sfx('click');
+  $('lobby').classList.remove('hidden');
+  lobbyStatus(`Joining ${code}…`);
+  try {
+    await joinLobby(code, myName, picked);
+    renderLobby();
+  } catch (e) {
+    lobbyStatus((e as Error).message, true);
+  }
+}
+function leaveLobby() {
+  leave();
+  renderLobby();
+  $('lobby').classList.add('hidden');
+}
+function startMultiplayer() {
+  if (net.role !== 'host') return;
+  if (!picked) picked = CHAMPS[0].id;
+  const humans: Human[] = net.players.map((p) => ({ peer: p.id, name: p.name, pick: p.pick || CHAMPS[Math.floor(Math.random() * CHAMPS.length)].id }));
+  demoMode = false;
+  $('feed').innerHTML = '';
+  newGame(picked, humans);
+  for (const [peer, u] of remote) sendTo(peer, { t: 'start', you: u.id });
+  enterMatch();
+  broadcast({ t: 'snap', s: encodeSnap() });
+}
+
+$('pname').addEventListener('input', (e) => {
+  myName = (e.target as HTMLInputElement).value.trim().slice(0, 16) || myName;
+  try {
+    localStorage.setItem('rift-name', myName);
+  } catch {
+    // storage unavailable
+  }
+  if (net.role === 'host') hostSync();
+});
+($('pname') as HTMLInputElement).value = myName;
+$('create').addEventListener('click', () => void createLobby());
+$('join').addEventListener('click', () => void joinWithCode(($('code') as HTMLInputElement).value));
+$('code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void joinWithCode(($('code') as HTMLInputElement).value);
+});
+$('lleave').addEventListener('click', () => {
+  sfx('click');
+  leaveLobby();
+});
+$('lstart').addEventListener('click', () => {
+  sfx('click');
+  startMultiplayer();
+});
+$('lcopy').addEventListener('click', () => {
+  const url = `${location.origin}${location.pathname}?lobby=${net.code}`;
+  void navigator.clipboard?.writeText(url).then(
+    () => lobbyStatus('Invite link copied.'),
+    () => lobbyStatus(url),
+  );
+});
 
 // ================= menu / end =================
 let picked = '';
@@ -2733,6 +3398,7 @@ function buildDifficulty() {
       // storage unavailable; selection still applies for this session
     }
     render();
+    hostSync();
   });
 }
 function buildMenu() {
@@ -2750,6 +3416,8 @@ function buildMenu() {
     if (!b) return;
     picked = b.dataset.id!;
     sfx('click');
+    if (net.role === 'guest') sendToHost({ t: 'pick', pick: picked });
+    hostSync();
     wrap.querySelectorAll('.champ').forEach((el) => el.classList.toggle('sel', el === b));
     const play = $<HTMLButtonElement>('play');
     play.disabled = false;
@@ -2762,6 +3430,10 @@ function start() {
   sfx('click');
   $('feed').innerHTML = '';
   newGame(picked);
+  enterMatch();
+}
+function enterMatch() {
+  demoMode = false;
   if (TOUCH) {
     G.zoom = clamp(Math.min(W, H) / 700, 0.55, 1);
     try {
@@ -2779,14 +3451,18 @@ function start() {
   audio.gameplay = true;
 }
 $('play').addEventListener('click', start);
-$('again').addEventListener('click', () => {
+function backToMenu() {
   $('end').classList.add('hidden');
   $('hud').classList.add('hidden');
   $('menu').classList.remove('hidden');
+  toggleShop(false);
   running = false;
   audio.gameplay = false;
   startDemo();
-});
+  renderLobby();
+}
+// in a lobby, "Play again" returns everyone to the lobby so the host can start another match
+$('again').addEventListener('click', backToMenu);
 function showEnd() {
   const won = G.over === G.player.team;
   const c = G.player.champ!;
@@ -2803,42 +3479,82 @@ buildMenu();
 buildDifficulty();
 buildMotionToggle();
 startDemo();
+{
+  const code = new URLSearchParams(location.search).get('lobby');
+  if (code) {
+    ($('code') as HTMLInputElement).value = cleanCode(code);
+    void joinWithCode(code);
+  }
+}
+window.addEventListener('beforeunload', () => leave());
 
 // ================= loop =================
 let last = performance.now();
 let debugPaused = false; // test hook: freeze the frame for screenshots
-function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-  if (G && debugPaused) render();
-  else if (G) {
-    // hit-stop freezes the simulation for a few frames; slow-mo plays the Nexus explosion
-    let sim = dt;
-    if (hitStop > 0) {
-      hitStop -= dt;
-      sim = 0;
-    } else if (slowmo > 0) {
-      slowmo -= dt;
-      sim = dt * 0.3;
-    }
-    hurt = Math.max(0, hurt - dt * 2.5);
-    if (running) {
-      edgePan(dt);
-      touchTick(sim);
-      update(sim);
-      updateHud();
-    } else if (demoMode) {
-      update(sim);
-      if (G.over !== null && (demoRestart += dt) > 4) startDemo();
-    }
-    updateParticles(sim);
-    updateShake(dt);
-    animDt += sim;
-    render();
+let snapAcc = 0;
+const SNAP_DT = 1 / 15;
+function simStep(dt: number) {
+  // hit-stop freezes the simulation for a few frames; slow-mo plays the Nexus explosion
+  let sim = dt;
+  if (hitStop > 0) {
+    hitStop -= dt;
+    sim = 0;
+  } else if (slowmo > 0) {
+    slowmo -= dt;
+    sim = dt * 0.3;
   }
+  hurt = Math.max(0, hurt - dt * 2.5);
+  if (running && net.role === 'guest') {
+    touchTick(dt);
+    guestTick(dt);
+    updateHud();
+  } else if (running) {
+    edgePan(dt);
+    touchTick(sim);
+    inSim = true;
+    try {
+      update(sim);
+    } finally {
+      inSim = false;
+    }
+    updateHud();
+    if (net.role === 'host' && (snapAcc += dt) >= SNAP_DT) {
+      snapAcc = 0;
+      broadcast({ t: 'snap', s: encodeSnap() });
+    }
+  } else if (demoMode) {
+    update(sim);
+    if (G.over !== null && (demoRestart += dt) > 4) startDemo();
+  }
+  updateParticles(sim);
+  updateShake(dt);
+  animDt += sim;
+}
+// A host keeps simulating in big steps when its tab is hidden, so guests aren't frozen.
+function tick(now: number, draw: boolean) {
+  const elapsed = (now - last) / 1000;
+  last = now;
+  if (!G) return;
+  if (debugPaused) {
+    if (draw) render();
+    return;
+  }
+  let left = Math.min(net.role === 'host' && running ? 1 : 0.05, elapsed);
+  do {
+    const dt = Math.min(0.05, left);
+    simStep(dt);
+    left -= dt;
+  } while (left > 0.001);
+  if (draw) render();
+}
+function frame(now: number) {
+  tick(now, true);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+setInterval(() => {
+  if (document.hidden && net.role === 'host' && running) tick(performance.now(), false);
+}, 250);
 
 // Debug/test hook
 Object.assign(window, {
@@ -2851,6 +3567,7 @@ Object.assign(window, {
       animDt += 1 / 30;
     }
   },
+  __riftNet: () => ({ role: net.role, code: net.code, players: net.players, snapBytes: G && net.role === 'host' ? JSON.stringify(encodeSnap()).length : 0 }),
   __riftPause: (on: boolean) => {
     debugPaused = on;
   },
