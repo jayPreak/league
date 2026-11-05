@@ -1548,3 +1548,380 @@ body.reduce .tbtn .tplus {
 body.touch #mp input {
   font-size: 16px; /* stops iOS zooming into the field */
 }
+
+/* ---------- champion select: compact grid + kit panel ---------- */
+#cselect {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  width: min(1100px, 100%);
+  align-items: start;
+}
+#ctabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 10px;
+  grid-column: 1 / -1;
+}
+#ctabs button {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  color: #cdbf9f;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+#ctabs button.on {
+  border-color: var(--gold);
+  color: #fff3d6;
+  background: rgba(200, 170, 110, 0.12);
+}
+#cselect #champs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+#cselect .champ {
+  width: auto;
+  padding: 3px;
+  border-radius: 14px;
+  text-align: center;
+}
+#cselect .champ[hidden] {
+  display: none;
+}
+#cselect .champ .core {
+  padding: 8px 6px;
+  border-radius: 11px;
+}
+#cselect .champ .orb,
+#cselect .champ .orb.img {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 6px;
+  font-size: 22px;
+}
+#cselect .champ h3 {
+  font-size: 13px;
+}
+#cselect .champ .role {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#cselect .champ.taken {
+  opacity: 0.3;
+  filter: grayscale(1);
+  cursor: not-allowed;
+}
+#cdetail {
+  background: linear-gradient(180deg, #111a24, #0b1118);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: left;
+  min-height: 200px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+#cdetail .dh {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#cdetail h3 {
+  margin: 0;
+  font-family: Cinzel, serif;
+  color: #fff3d6;
+}
+#cdetail .dh span {
+  font-size: 12px;
+  color: #a99a7a;
+  font-style: italic;
+}
+#cdetail .role {
+  font-size: 12px;
+  color: var(--gold);
+  margin: 4px 0 10px;
+}
+#cdetail ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+#cdetail li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: #c9c2b2;
+}
+#cdetail li > b {
+  display: grid;
+  place-items: center;
+  height: 26px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 6px;
+  color: #fff3d6;
+}
+#cdetail li em {
+  color: #8c9bab;
+  font-style: normal;
+  font-size: 11px;
+}
+#cdetail li p {
+  margin: 2px 0 0;
+}
+#cdetail .hint {
+  color: #8c9bab;
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  #cselect {
+    grid-template-columns: 1fr;
+  }
+  #cselect #champs {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    max-height: 34vh;
+  }
+  #cselect .champ .orb,
+  #cselect .champ .orb.img {
+    width: 48px;
+    height: 48px;
+  }
+  #cdetail {
+    max-height: 22vh;
+    min-height: 0;
+  }
+}
+
+/* ---------- matchmaking ---------- */
+#mm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 14px;
+  padding: 10px 14px;
+  border: 1px solid rgba(200, 170, 110, 0.22);
+  border-radius: 16px;
+  background: rgba(8, 12, 18, 0.7);
+  max-width: min(980px, 100%);
+}
+#rank {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #c9c2b2;
+}
+.rbadge {
+  font-family: Cinzel, serif;
+  font-weight: 800;
+  color: var(--c);
+  border: 1px solid var(--c);
+  border-radius: 999px;
+  padding: 2px 10px;
+  letter-spacing: 0.06em;
+}
+.rbar {
+  width: 70px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.rbar i {
+  display: block;
+  height: 100%;
+}
+.rwl {
+  color: #8c9bab;
+}
+#mmodes {
+  display: flex;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
+}
+#mmodes button {
+  background: transparent;
+  border: 0;
+  color: #cdbf9f;
+  padding: 7px 14px;
+  font-size: 13px;
+  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+#mmodes button.on {
+  background: rgba(200, 170, 110, 0.18);
+  color: #fff3d6;
+}
+#mmodes button:disabled {
+  opacity: 0.6;
+}
+#find {
+  background: linear-gradient(#8a6a2a, #4a3612);
+  border: 1px solid #e8c46a;
+  color: #fff3d6;
+  font-family: Cinzel, serif;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 8px 26px;
+  border-radius: 999px;
+  transition: transform 160ms var(--ease-out);
+}
+#find:active,
+#faccept:active {
+  transform: scale(0.97);
+}
+#mmq {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #c9c2b2;
+}
+#mmq.hidden,
+#find.hidden {
+  display: none;
+}
+#mmtime {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #fff3d6;
+  min-width: 38px;
+}
+#mmcancel {
+  background: transparent;
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  color: #ff9a9a;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+#found {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(6px);
+  z-index: 60;
+}
+#found.hidden {
+  display: none;
+}
+.fbox {
+  text-align: center;
+  padding: 26px 34px;
+  border: 1px solid rgba(200, 170, 110, 0.4);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #121c27, #0a1017);
+  animation: rise 260ms var(--ease-out) both;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.fbox .eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: #e8c46a;
+}
+.fbox h2 {
+  margin: 0;
+  font-family: Cinzel, serif;
+  color: #fff3d6;
+}
+.fbox p {
+  margin: 0;
+  color: #a9b4c0;
+  font-size: 13px;
+}
+.fclock {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin: 6px 0;
+}
+.fclock svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.fclock circle {
+  fill: none;
+  stroke-width: 6;
+}
+.fclock .track {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+.fclock .ring {
+  stroke: #e8c46a;
+  stroke-dasharray: 283;
+  stroke-linecap: round;
+}
+#ftime {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff3d6;
+}
+#faccept {
+  background: linear-gradient(#2a7a4a, #12402a);
+  border: 1px solid #7dff9c;
+  color: #eafff0;
+  font-family: Cinzel, serif;
+  font-weight: 800;
+  font-size: 18px;
+  padding: 10px 48px;
+  border-radius: 999px;
+  transition: transform 160ms var(--ease-out);
+}
+#found.accepted #faccept {
+  opacity: 0.7;
+  pointer-events: none;
+}
+#fdecline {
+  background: transparent;
+  border: 0;
+  color: #8c9bab;
+  font-size: 12px;
+  text-decoration: underline;
+}
+#lobby.draft #lplayers .tlabel {
+  list-style: none;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 6px 2px 2px;
+  background: none;
+  border: 0;
+}
+#lobby.draft #lplayers .tlabel.blue {
+  color: #7fb6ff;
+}
+#lobby.draft #lplayers .tlabel.red {
+  color: #ff8a8a;
+}
+#lplayers li.me {
+  outline: 1px solid rgba(232, 196, 106, 0.6);
+}
+#lplayers .pname i {
+  font-style: normal;
+  font-size: 11px;
+}

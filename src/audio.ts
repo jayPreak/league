@@ -223,7 +223,7 @@ export type SoundName = keyof typeof SOUNDS;
 
 // Menu sounds play any time; everything else needs a running match (the menu's bot match stays silent).
 // Positioned sounds fade with distance from the camera and pan left/right.
-const MENU = new Set(['click', 'victory', 'defeat']);
+const MENU = new Set(['click', 'victory', 'defeat', 'levelUp']);
 
 export function sfx(name: SoundName, at?: Vec, vol = 1) {
   if (!ac || audio.muted) return;

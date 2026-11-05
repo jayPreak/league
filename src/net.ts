@@ -3,7 +3,7 @@
 // signalling server, so no game server is needed.
 import Peer, { type DataConnection } from 'peerjs';
 
-export const MAX_PLAYERS = 3;
+export const MAX_PLAYERS = 3; // co-op lobbies; matchmade ranked lobbies take 6
 const PREFIX = 'riftclash-v1-';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -12,14 +12,17 @@ export interface LobbyPlayer {
   name: string;
   pick: string;
   host: boolean;
+  team?: 0 | 1;
+  mmr?: number;
+  mmId?: string; // matchmaking ticket id, so the host can seat players on their team
 }
 
 // Everything that crosses the wire. Guests only send hello/pick/cmd.
 export type Msg =
-  | { t: 'hello'; name: string; pick: string }
+  | { t: 'hello'; name: string; pick: string; mmId?: string; mmr?: number }
   | { t: 'pick'; pick: string }
   | { t: 'cmd'; cmd: Cmd }
-  | { t: 'lobby'; players: LobbyPlayer[]; diff: string }
+  | { t: 'lobby'; players: LobbyPlayer[]; diff: string; mm?: { mode: 'coop' | 'ranked'; left: number } }
   | { t: 'start'; you: number }
   | { t: 'snap'; s: unknown }
   | { t: 'full' }
@@ -41,6 +44,7 @@ export const net = {
   code: '',
   peer: null as Peer | null,
   conns: new Map<string, DataConnection>(), // host: guests by peer id
+  capacity: MAX_PLAYERS,
   hostConn: null as DataConnection | null, // guest: link to host
   players: [] as LobbyPlayer[],
   onMsg: (_from: string, _m: Msg) => {},
@@ -57,11 +61,12 @@ function wire(conn: DataConnection, from: string) {
   conn.on('error', () => net.onLeave(from));
 }
 
-export function hostLobby(): Promise<string> {
+export function hostLobby(fixed?: string, capacity = MAX_PLAYERS): Promise<string> {
   leave();
+  net.capacity = capacity;
   return new Promise((resolve, reject) => {
     const tryOpen = (attempt: number) => {
-      const code = makeCode();
+      const code = fixed ?? makeCode();
       const peer = new Peer(PREFIX + code);
       peer.on('open', () => {
         net.role = 'host';
@@ -71,7 +76,7 @@ export function hostLobby(): Promise<string> {
       });
       peer.on('connection', (conn) => {
         conn.on('open', () => {
-          if (net.conns.size >= MAX_PLAYERS - 1) {
+          if (net.conns.size >= net.capacity - 1) {
             conn.send({ t: 'full' } satisfies Msg);
             setTimeout(() => conn.close(), 300);
             return;
@@ -82,7 +87,7 @@ export function hostLobby(): Promise<string> {
       });
       peer.on('error', (e) => {
         const type = (e as { type?: string }).type;
-        if (type === 'unavailable-id' && attempt < 4) {
+        if (type === 'unavailable-id' && attempt < 4 && !fixed) {
           peer.destroy();
           tryOpen(attempt + 1);
         } else if (net.role !== 'host') reject(e);
@@ -97,7 +102,18 @@ export function hostLobby(): Promise<string> {
   });
 }
 
-export function joinLobby(code: string, name: string, pick: string): Promise<void> {
+export async function joinLobby(code: string, name: string, pick: string, extra: { mmId?: string; mmr?: number } = {}, tries = 1): Promise<void> {
+  for (let i = 1; ; i++) {
+    try {
+      return await joinOnce(code, name, pick, extra);
+    } catch (e) {
+      // matchmade guests can arrive before the host has opened the lobby
+      if (i >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+  }
+}
+function joinOnce(code: string, name: string, pick: string, extra: { mmId?: string; mmr?: number }): Promise<void> {
   leave();
   return new Promise((resolve, reject) => {
     const peer = new Peer();
@@ -119,7 +135,7 @@ export function joinLobby(code: string, name: string, pick: string): Promise<voi
         net.peer = peer;
         net.hostConn = conn;
         wire(conn, 'host');
-        conn.send({ t: 'hello', name, pick } satisfies Msg);
+        conn.send({ t: 'hello', name, pick, ...extra } satisfies Msg);
         resolve();
       });
       conn.on('error', () => fail('Could not reach the lobby.'));

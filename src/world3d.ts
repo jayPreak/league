@@ -37,6 +37,8 @@ export interface WUnit {
   act: string;
   actN: number;
   champ: { def: { id: string; ranged: boolean }; dash: unknown; recallT: number } | null;
+  airT?: number;
+  stealthT?: number;
 }
 
 // Height of the top of each body, for health bars, hover tests and effects.
@@ -476,8 +478,35 @@ interface HeroCfg {
   hide: string[];
   attack: string;
   abilities: string[]; // per slot
+  hue?: string; // recolours cloth and armour so heroes sharing a body read apart
 }
+// props baked into each KayKit body; a hero shows the ones in `keep`
+const PROPS: Record<string, string[]> = {
+  Mage: ['Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff'],
+  Barbarian: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', '2H_Axe', 'Mug'],
+  Rogue: ['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable'],
+  Rogue_Hooded: ['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable'],
+  Knight: ['1H_Sword_Offhand', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '1H_Sword', '2H_Sword'],
+};
+const hero = (file: string, keep: string[], attack: string, abilities: string[], hue?: string): HeroCfg => ({
+  file,
+  hide: PROPS[file].filter((p) => !keep.includes(p)),
+  attack,
+  abilities,
+  hue,
+});
 const HEROES: Record<string, HeroCfg> = {
+  gorvald: hero('Knight', ['1H_Sword', 'Rectangle_Shield'], '1H_Melee_Attack_Chop', ['Dodge_Forward', 'Cheer', '2H_Melee_Attack_Spin', 'Dodge_Forward']),
+  nyssa: hero('Rogue_Hooded', ['Knife', 'Knife_Offhand'], '1H_Melee_Attack_Chop', ['Dodge_Forward', 'Spellcast_Raise', '2H_Melee_Attack_Spin', 'Dodge_Forward'], '#6a3a9a'),
+  solenne: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Raise', 'Spellcast_Long'], '#ffd0ea'),
+  hollen: hero('Barbarian', ['1H_Axe', 'Barbarian_Round_Shield'], '1H_Melee_Attack_Chop', ['Throw', 'Cheer', '2H_Melee_Attack_Chop', 'Cheer'], '#5f8f4a'),
+  mirela: hero('Mage', ['2H_Staff'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Dodge_Forward', 'Spellcast_Long'], '#d84a2a'),
+  dunstan: hero('Knight', ['2H_Sword'], '2H_Melee_Attack_Chop', ['2H_Melee_Attack_Chop', 'Cheer', '2H_Melee_Attack_Spin', '2H_Melee_Attack_Chop'], '#d9a441'),
+  kestra: hero('Rogue', ['Knife', 'Knife_Offhand'], '1H_Melee_Attack_Chop', ['Dodge_Forward', 'Cheer', 'Spellcast_Raise', '2H_Melee_Attack_Spin'], '#d8345c'),
+  ferro: hero('Rogue_Hooded', ['2H_Crossbow'], '2H_Ranged_Shoot', ['2H_Ranged_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], '#3a9ad8'),
+  wren: hero('Rogue_Hooded', ['1H_Crossbow', 'Knife_Offhand'], '1H_Ranged_Shoot', ['1H_Ranged_Shoot', 'Throw', 'Dodge_Forward', 'Spellcast_Raise'], '#c8a440'),
+  ysolde: hero('Mage', ['Spellbook_open', '1H_Wand'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], '#6f88e8'),
+  rook: hero('Knight', ['1H_Sword', 'Round_Shield'], '1H_Melee_Attack_Chop', ['Throw', 'Cheer', 'Dodge_Forward', '2H_Melee_Attack_Chop'], '#8a6a4a'),
   aurin: { file: 'Mage', hide: ['Spellbook', 'Spellbook_open', '1H_Wand'], attack: 'Spellcast_Shoot', abilities: ['Spellcast_Shoot', 'Spellcast_Raise', 'Dodge_Forward', 'Spellcast_Long'] },
   brakk: { file: 'Barbarian', hide: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', 'Mug'], attack: '2H_Melee_Attack_Chop', abilities: ['Cheer', '2H_Melee_Attack_Spin', 'Dodge_Forward', '2H_Melee_Attack_Chop'] },
   sylla: { file: 'Rogue', hide: ['Knife_Offhand', '1H_Crossbow', 'Knife', 'Throwable'], attack: '2H_Ranged_Shoot', abilities: ['Spellcast_Raise', '2H_Ranged_Shoot', 'Dodge_Forward', '2H_Ranged_Shoot'] },
@@ -497,7 +526,7 @@ export let modelsReady = false;
 export async function loadModels(): Promise<void> {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const base = `${import.meta.env.BASE_URL}models/`;
-  const files = ['Mage', 'Barbarian', 'Rogue', 'Skeleton_Minion', 'Skeleton_Mage', 'Skeleton_Warrior', 'Skeleton_Blade', 'Skeleton_Staff', 'Skeleton_Axe', 'Skeleton_Shield_Small_A'];
+  const files = ['Mage', 'Barbarian', 'Rogue', 'Knight', 'Rogue_Hooded', 'Skeleton_Minion', 'Skeleton_Mage', 'Skeleton_Warrior', 'Skeleton_Blade', 'Skeleton_Staff', 'Skeleton_Axe', 'Skeleton_Shield_Small_A'];
   const [hero, skel, ...gl] = await Promise.all([
     loader.loadAsync(`${base}anims_hero.glb`),
     loader.loadAsync(`${base}anims_skel.glb`),
@@ -555,6 +584,7 @@ function findBone(root: THREE.Object3D, name: string) {
   return root.getObjectByName(name) ?? root.getObjectByName(name.replace('.', ''));
 }
 
+const CLOTH = /Body|Cape|Hat|Helmet|ArmLeft|ArmRight|LegLeft|LegRight/;
 function makeAvatar(u: WUnit): Avatar | null {
   let file: string;
   let attack: string;
@@ -563,12 +593,14 @@ function makeAvatar(u: WUnit): Avatar | null {
   let tint: RegExp | null = null;
   let weapon = '';
   let offhand = '';
+  let hue: THREE.Color | null = null;
   if (u.kind === 'champ') {
     const h = HEROES[u.champ!.def.id] ?? HEROES.aurin;
     file = h.file;
     attack = h.attack;
     abilities = h.abilities;
     hide = h.hide;
+    if (h.hue) hue = new THREE.Color(h.hue);
   } else {
     const m = MINIONS[u.mtype ?? 'melee'];
     file = m.file;
@@ -600,6 +632,7 @@ function makeAvatar(u: WUnit): Avatar | null {
         mat.color = team.clone().multiplyScalar(0.8);
       }
       else if (u.kind === 'minion') mat.color = new THREE.Color('#ffffff').lerp(team, 0.18);
+      else if (hue && CLOTH.test(mesh.name)) mat.color = new THREE.Color('#ffffff').lerp(hue, 0.55);
       mats.push(mat);
     }
     mesh.material = mat;
@@ -729,6 +762,7 @@ export interface SyncOpts {
   hovered: WUnit | null;
   winner: Team | null;
   view: View;
+  viewTeam: Team;
 }
 
 export function syncUnits(units: WUnit[], o: SyncOpts) {
@@ -853,8 +887,19 @@ function animate(av: Avatar, o: SyncOpts, visible: boolean) {
   const born = u.fadeIn > 0 ? easeOutBack(1 - u.fadeIn / 0.45) : 1;
   const lunge = u.lunge > 0 ? Math.sin((1 - u.lunge) * Math.PI) : 0;
   const reach = u.kind === 'champ' && !u.champ!.def.ranged ? 18 : u.mtype === 'melee' || u.mtype === 'super' ? 10 : -4;
-  av.root.position.set(u.x + u.lx * lunge * reach, 0, u.y + u.ly * lunge * reach);
+  const air = u.airT && u.airT > 0 ? Math.min(1, u.airT * 4) * 70 : 0;
+  av.root.position.set(u.x + u.lx * lunge * reach, air, u.y + u.ly * lunge * reach);
   av.root.rotation.y = 0;
+  // stealth: enemies don't see you at all, allies see a ghost
+  const hidden = (u.stealthT ?? 0) > 0;
+  if (hidden && u.team !== o.viewTeam) av.root.visible = false;
+  const ghost = hidden ? 0.35 : 1;
+  for (const m of av.mats) {
+    if (m.opacity !== ghost) {
+      m.transparent = ghost < 1;
+      m.opacity = ghost;
+    }
+  }
   av.model.rotation.y = av.yaw;
   av.model.scale.set(av.scale * (1 + 0.1 * k) * born, av.scale * (1 - 0.1 * k) * born, av.scale * (1 + 0.1 * k) * born);
   // hit flash, hover and slow tints all ride on emissive
@@ -968,8 +1013,16 @@ export function renderPortraits(size = 256): Record<string, string> {
     const tpl = templates.get(h.file);
     if (!tpl) continue;
     const m = cloneSkinned(tpl);
+    const hue = h.hue ? new THREE.Color(h.hue) : null;
     m.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh && h.hide.includes(o.name)) o.visible = false;
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (h.hide.includes(o.name)) o.visible = false;
+      else if (hue && CLOTH.test(o.name)) {
+        const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+        mat.color = new THREE.Color('#ffffff').lerp(hue, 0.55);
+        mesh.material = mat;
+      }
     });
     const mixer = new THREE.AnimationMixer(m);
     const idle = clips.get('Idle');

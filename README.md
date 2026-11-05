@@ -69,3 +69,24 @@ How it works: the host's browser runs the whole match. Guests connect to it dire
 ## LoL systems
 
 Mana with per-ability costs, ability ranks (one point per level, R at 6/11/16; **Ctrl+Q/W/E/R** or the **+** button), inhibitors that respawn after 150 seconds, two Nexus turrets, and super minions in a lane whose enemy inhibitor is down.
+
+## Roster (14 original champions)
+
+Aurin (mage), Brakk (fighter), Sylla (marksman), Gorvald (warden tank), Nyssa (assassin), Solenne (enchanter),
+Hollen (hook catcher), Mirela (battle mage), Dunstan (juggernaut), Kestra (skirmisher), Ferro (artillery),
+Wren (trapper marksman), Ysolde (binder support), Rook (vanguard tank). All characters are original; the kits
+use common MOBA mechanics: hooks, knockups, knockbacks, roots, stuns, slows, shields, stealth, empowered
+attacks, executes, ground zones, traps, ally heals and map-wide ultimates.
+
+## Matchmaking
+
+- **Find match** queues for Co-op vs AI (up to 3 humans) or Ranked 3v3 (humans on both teams).
+- No game server: the first player in queue claims a well-known PeerJS id and becomes the broker; if it leaves,
+  the next client takes over and everyone re-sends their ticket with their original queue time.
+- Tickets group by MMR; the search window starts at ±150 and widens 20/s (max ±900). Smaller groups are
+  allowed after waiting (co-op: 3 now, 2 after 20s, solo after 35s; ranked: 6 now, 4 after 40s, 2 after 70s),
+  and bots fill empty slots.
+- Ranked teams are snake-drafted by MMR. Everyone must accept within 12s; decliners and no-shows are dropped,
+  the rest go back in line.
+- 30s champion select, each champion once per match. Elo rating (K 48 for the first 10 games, then 28) is
+  stored locally, with tiers Stone → Mythic.
