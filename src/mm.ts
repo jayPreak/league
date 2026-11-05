@@ -11,6 +11,7 @@ export interface Ticket {
   name: string;
   mmr: number;
   mode: Mode;
+  role: string; // preferred position (top / jungle / mid / adc / support / fill)
   since: number; // ms epoch when this player first queued
 }
 export interface MatchInfo {
@@ -19,7 +20,7 @@ export interface MatchInfo {
   hostId: string;
   you: string;
   mode: Mode;
-  players: { id: string; name: string; mmr: number; team: 0 | 1 }[];
+  players: { id: string; name: string; mmr: number; team: 0 | 1; role: string }[];
 }
 type ToBroker =
   | { t: 'queue'; ticket: Ticket }
@@ -46,8 +47,8 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const ACCEPT_TIME = 12;
 // how many humans a match needs, and how long each smaller size has to wait before it is allowed
 export const MODES: Record<Mode, { sizes: [number, number][] }> = {
-  coop: { sizes: [[3, 0], [2, 20], [1, 35]] },
-  ranked: { sizes: [[6, 0], [4, 40], [2, 70]] },
+  coop: { sizes: [[5, 0], [3, 20], [2, 30], [1, 40]] },
+  ranked: { sizes: [[10, 0], [6, 45], [4, 65], [2, 85]] },
 };
 export const spreadFor = (waitS: number) => Math.min(900, 150 + 20 * waitS);
 
@@ -273,7 +274,7 @@ class Broker {
     switch (m.t) {
       case 'queue':
         if (c) this.conns.set(from, c);
-        this.queue.set(from, { ...m.ticket, id: from, mmr: Math.round(clamp(m.ticket.mmr, 0, 4000)), name: String(m.ticket.name).slice(0, 16) });
+        this.queue.set(from, { ...m.ticket, id: from, mmr: Math.round(clamp(m.ticket.mmr, 0, 4000)), name: String(m.ticket.name).slice(0, 16), role: String(m.ticket.role ?? 'fill').slice(0, 8) });
         this.tick();
         break;
       case 'cancel':
@@ -304,7 +305,7 @@ class Broker {
       // longest-waiting player hosts
       const hostable = p.tickets.filter((t) => t.id !== 'broker');
       const host = (hostable.length ? hostable : p.tickets).reduce((a, b) => (a.since <= b.since ? a : b));
-      const info = { matchId: p.id, code, hostId: host.id, mode: p.mode, players: p.tickets.map((t) => ({ id: t.id, name: t.name, mmr: t.mmr, team: teams.get(t.id) ?? 0 })) };
+      const info = { matchId: p.id, code, hostId: host.id, mode: p.mode, players: p.tickets.map((t) => ({ id: t.id, name: t.name, mmr: t.mmr, team: teams.get(t.id) ?? 0, role: t.role })) };
       for (const t of p.tickets) this.to(t.id, { t: 'ready', info });
       return;
     }
@@ -361,15 +362,15 @@ export function findGroup(pool: Ticket[], mode: Mode, now: number): Ticket[] | n
   return null;
 }
 
-// Ranked: snake-draft by MMR (1-2-2-1) so both sides land on a similar average. Co-op: all Blue.
+// Ranked: snake-draft by MMR (1-2-2-1...) so both sides land on a similar average. Co-op: all Blue.
 export function balanceTeams(ts: Ticket[], mode: Mode): Map<string, 0 | 1> {
   const out = new Map<string, 0 | 1>();
   if (mode === 'coop') {
     for (const t of ts) out.set(t.id, 0);
     return out;
   }
-  const order: (0 | 1)[] = [0, 1, 1, 0, 0, 1];
-  [...ts].sort((a, b) => b.mmr - a.mmr).forEach((t, i) => out.set(t.id, order[i % 6]));
+  const order: (0 | 1)[] = [0, 1, 1, 0];
+  [...ts].sort((a, b) => b.mmr - a.mmr).forEach((t, i) => out.set(t.id, order[i % 4]));
   return out;
 }
 

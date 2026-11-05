@@ -58,6 +58,7 @@
           <div class="mrow">
             <button id="mshop">Shop · <span id="mgold">0</span>g</button>
             <button id="mrecall">Recall</button>
+            <button id="mward">Ward</button>
           </div>
         </div>
         <div id="tbuttons"></div>
@@ -77,13 +78,14 @@
 
     <div id="menu">
       <h1>RIFT CLASH</h1>
-      <p class="tag">3v3 lane battle. Destroy the enemy Nexus.</p>
+      <p class="tag">5v5 on a full-size rift. Destroy the enemy Nexus.</p>
+      <div id="roles"></div>
       <div id="cselect"><div id="ctabs"></div><div id="champs"></div><div id="cdetail"></div></div>
       <div id="diff"></div>
       <button id="play" disabled>Pick a champion</button>
       <div id="mm">
         <div id="rank"></div>
-        <div id="mmodes"><button data-m="coop" class="on">Co-op vs AI</button><button data-m="ranked">Ranked 3v3</button></div>
+        <div id="mmodes"><button data-m="coop" class="on">Co-op vs AI</button><button data-m="ranked">Ranked 5v5</button></div>
         <button id="find">Find match</button>
         <div id="mmq" class="hidden"><span id="mmtime">0:00</span><span id="mmstatus"></span><button id="mmcancel">Cancel</button></div>
       </div>
@@ -117,7 +119,7 @@
       <div class="controls desk">
         <div><b>Right / Left click</b> move &amp; attack (hold to keep moving)</div>
         <div><b>Q W E R</b> abilities at cursor · <b>Ctrl+Q/W/E/R</b> or <b>+</b> to learn (R at 6) · <b>Tab</b> scoreboard</div>
-        <div><b>D</b> Flash · <b>F</b> Heal · <b>B</b> Recall · <b>S</b> Stop</div>
+        <div><b>D</b> Flash · <b>F</b> Heal / Smite (jungle) · <b>4</b> Ward · <b>B</b> Recall · <b>S</b> Stop</div>
         <div><b>P</b> Shop (in fountain) · <b>M</b> mute · <b>Y</b> camera lock · <b>Space</b> center · <b>wheel</b> zoom</div>
       </div>
     </div>

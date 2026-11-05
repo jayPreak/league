@@ -6,7 +6,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { BASES, FOUNTAIN_R, LANES, MAP, RIVER } from './data';
-import type { Team, Vec } from './data';
+import type { Side, Team, Vec } from './data';
+import { blocked, BRUSHES, CAMPS, CELL, GN } from './terrain';
 
 // Orthographic camera tilted 56° above the horizon. Ortho keeps the ground plane affine on screen,
 // so the 2D overlay lines up with a plain scale: screen y = (y - cy) * zoom * K - height * zoom * HK.
@@ -18,8 +19,8 @@ const TOUCH = matchMedia('(pointer: coarse)').matches || new URLSearchParams(loc
 const TEAM_HEX = [0x3b8cff, 0xff4d4d];
 
 export interface WUnit {
-  kind: 'champ' | 'minion' | 'tower' | 'nexus';
-  team: Team;
+  kind: 'champ' | 'minion' | 'tower' | 'nexus' | 'monster' | 'ward';
+  team: Side;
   x: number;
   y: number;
   r: number;
@@ -39,12 +40,17 @@ export interface WUnit {
   champ: { def: { id: string; ranged: boolean }; dash: unknown; recallT: number } | null;
   airT?: number;
   stealthT?: number;
+  monster?: string | null;
+  fogged?: boolean; // hidden from the viewer by fog of war or brush
 }
 
 // Height of the top of each body, for health bars, hover tests and effects.
-export function unitHeight(u: Pick<WUnit, 'kind' | 'mtype' | 'tier'>): number {
+const MONSTER_H: Record<string, number> = { azure: 210, ember: 210, toad: 130, birdBig: 110, bird: 70, boarBig: 120, boar: 80, hulkBig: 150, hulk: 110, skitter: 70, drake: 300, colossus: 380 };
+export function unitHeight(u: Pick<WUnit, 'kind' | 'mtype' | 'tier'> & { monster?: string | null }): number {
   if (u.kind === 'champ') return 150;
-  if (u.kind === 'tower') return u.tier === 2 ? 170 : 300;
+  if (u.kind === 'tower') return u.tier === 3 ? 170 : 300;
+  if (u.kind === 'monster') return MONSTER_H[u.monster ?? ''] ?? 100;
+  if (u.kind === 'ward') return 70;
   if (u.kind === 'nexus') return 250;
   return u.mtype === 'super' ? 140 : u.mtype === 'siege' ? 104 : u.mtype === 'caster' ? 76 : 82;
 }
@@ -95,7 +101,7 @@ export const groundCanvas = document.createElement('canvas');
 groundCanvas.width = groundCanvas.height = TEX;
 const trees: { x: number; y: number; s: number; v: number }[] = [];
 const rocks: { x: number; y: number; s: number }[] = [];
-const brush: { x: number; y: number }[] = [];
+const brush: { x: number; y: number; r: number }[] = [];
 
 (function paintGround() {
   const m = groundCanvas.getContext('2d')!;
@@ -110,24 +116,29 @@ const brush: { x: number; y: number }[] = [];
     m.fillRect(x - r, y - r, r * 2, r * 2);
   };
   // painterly colour drift
-  for (let i = 0; i < 420; i++) {
+  for (let i = 0; i < 700; i++) {
     const c = ['rgba(118,150,62,0.35)', 'rgba(40,82,52,0.35)', 'rgba(150,160,70,0.22)', 'rgba(32,70,48,0.3)'][i % 4];
-    blob(rnd() * MAP, rnd() * MAP, 120 + rnd() * 320, c);
+    blob(rnd() * MAP, rnd() * MAP, 300 + rnd() * 900, c);
   }
-  // jungle placement: trees wherever there is no lane, river or base
-  for (let i = 0; i < 2600; i++) {
-    const p = { x: rnd() * MAP, y: rnd() * MAP };
-    const laneD = Math.min(...LANES.map((l) => polyDist(p, l)));
-    const riverD = segDist(p, RIVER[0], RIVER[1]);
-    if (laneD < 250 || riverD < 210 || dist(p, BASES[0]) < 980 || dist(p, BASES[1]) < 980) continue;
-    // keep a few camp clearings open so the jungle reads as paths, not a carpet
-    const clearing = ((p.x * 0.0021 + Math.sin(p.y * 0.003) * 1.3) % 1 + 1) % 1;
-    if (clearing < 0.16 && laneD > 420) continue;
-    if (rnd() < 0.1) rocks.push({ x: p.x, y: p.y, s: 0.7 + rnd() * 0.9 });
-    else trees.push({ x: p.x, y: p.y, s: 0.75 + rnd() * 0.6, v: rnd() });
-  }
-  for (const t of trees) blob(t.x, t.y, 120 * t.s, 'rgba(24,52,30,0.55)');
-  // river bed
+  // walls: a dark canopy floor, with trees along every edge that faces a path
+  const wall = (gx: number, gy: number) => gx < 0 || gy < 0 || gx >= GN || gy >= GN || blocked[gy * GN + gx] === 1;
+  for (let gy = 0; gy < GN; gy++)
+    for (let gx = 0; gx < GN; gx++) {
+      if (!wall(gx, gy)) continue;
+      const x = (gx + 0.5) * CELL;
+      const y = (gy + 0.5) * CELL;
+      blob(x, y, 150, 'rgba(22,48,28,0.55)');
+      // trees on edge cells lean back into the wall so paths stay readable
+      const ox = (wall(gx + 1, gy) ? 0 : -1) + (wall(gx - 1, gy) ? 0 : 1);
+      const oy = (wall(gx, gy + 1) ? 0 : -1) + (wall(gx, gy - 1) ? 0 : 1);
+      const edge = ox !== 0 || oy !== 0;
+      if (edge || rnd() < (TOUCH ? 0.1 : 0.18)) {
+        const jx = x + ox * 22 + (rnd() - 0.5) * 30;
+        const jy = y + oy * 22 + (rnd() - 0.5) * 30;
+        if (edge && rnd() < 0.08) rocks.push({ x: jx, y: jy, s: 0.7 + rnd() * 0.6 });
+        else trees.push({ x: jx, y: jy, s: (edge ? 0.72 : 0.95) + rnd() * 0.35, v: rnd() });
+      }
+    }
   m.lineCap = 'round';
   m.lineJoin = 'round';
   const stroke = (poly: Vec[], w: number, col: string) => {
@@ -138,82 +149,72 @@ const brush: { x: number; y: number }[] = [];
     for (const p of poly.slice(1)) m.lineTo(p.x, p.y);
     m.stroke();
   };
-  stroke(RIVER, 420, 'rgba(60,80,50,0.7)');
-  stroke(RIVER, 330, '#3f5f4d');
-  stroke(RIVER, 260, '#2c5a62');
+  // river bed
+  stroke(RIVER, 1150, 'rgba(60,80,50,0.7)');
+  stroke(RIVER, 980, '#3f5f4d');
+  stroke(RIVER, 820, '#2c5a62');
+  // camp clearings and epic pits
+  for (const c of CAMPS) {
+    blob(c.x, c.y, c.epic ? 760 : 520, c.epic ? 'rgba(40,52,60,0.55)' : 'rgba(120,104,70,0.45)');
+    if (c.epic) {
+      m.strokeStyle = 'rgba(30,40,46,0.6)';
+      m.lineWidth = 26;
+      m.beginPath();
+      m.arc(c.x, c.y, 600, 0, Math.PI * 2);
+      m.stroke();
+    }
+  }
   // lanes: soft worn edge, packed dirt, pale centre
-  for (const l of LANES) stroke(l, 330, 'rgba(92,86,52,0.55)');
-  for (const l of LANES) stroke(l, 260, '#8a7550');
-  for (const l of LANES) stroke(l, 180, '#a08b62');
-  for (const l of LANES) stroke(l, 90, 'rgba(184,163,118,0.55)');
-  // pebbles and cracks along the lanes
+  for (const l of LANES) stroke(l, 940, 'rgba(92,86,52,0.5)');
+  for (const l of LANES) stroke(l, 780, '#8a7550');
+  for (const l of LANES) stroke(l, 600, '#a08b62');
+  for (const l of LANES) stroke(l, 260, 'rgba(184,163,118,0.5)');
+  // pebbles along the lanes
   for (const l of LANES)
     for (let i = 0; i < l.length - 1; i++) {
       const a = l[i];
       const b = l[i + 1];
       const len = dist(a, b);
-      for (let s = 0; s < len; s += 18) {
-        const t = s / len;
-        const off = (rnd() - 0.5) * 230;
+      for (let st = 0; st < len; st += 22) {
+        const t = st / len;
+        const off = (rnd() - 0.5) * 760;
         const nx = -(b.y - a.y) / len;
         const ny = (b.x - a.x) / len;
-        m.fillStyle = rnd() < 0.5 ? 'rgba(70,58,38,0.35)' : 'rgba(210,196,160,0.35)';
+        m.fillStyle = rnd() < 0.5 ? 'rgba(70,58,38,0.4)' : 'rgba(210,196,160,0.4)';
         m.beginPath();
-        m.ellipse(a.x + (b.x - a.x) * t + nx * off, a.y + (b.y - a.y) * t + ny * off, 3 + rnd() * 7, 2 + rnd() * 4, rnd() * 3, 0, Math.PI * 2);
+        m.ellipse(a.x + (b.x - a.x) * t + nx * off, a.y + (b.y - a.y) * t + ny * off, 6 + rnd() * 12, 4 + rnd() * 7, rnd() * 3, 0, Math.PI * 2);
         m.fill();
       }
     }
-  // grass strokes for texture
-  for (let i = 0; i < (TOUCH ? 30000 : 70000); i++) {
-    const x = rnd() * MAP;
-    const y = rnd() * MAP;
-    m.strokeStyle = ['rgba(150,190,80,0.25)', 'rgba(30,70,40,0.3)', 'rgba(190,200,110,0.18)'][i % 3];
-    m.lineWidth = 2;
-    m.beginPath();
-    m.moveTo(x, y);
-    m.lineTo(x + (rnd() - 0.5) * 6, y - 6 - rnd() * 8);
-    m.stroke();
+  for (const b of BRUSHES) {
+    brush.push(b);
+    blob(b.x, b.y, b.r * 1.2, 'rgba(30,70,60,0.55)');
   }
-  // brush patches beside the lanes
-  for (const l of LANES)
-    for (let i = 0; i < l.length - 1; i++) {
-      const a = l[i];
-      const b = l[i + 1];
-      for (const t of [0.38, 0.62]) {
-        const len = dist(a, b);
-        const nx = -(b.y - a.y) / len;
-        const ny = (b.x - a.x) / len;
-        const side = rnd() < 0.5 ? -1 : 1;
-        const p = { x: a.x + (b.x - a.x) * t + nx * side * 215, y: a.y + (b.y - a.y) * t + ny * side * 215 };
-        if (dist(p, BASES[0]) < 1100 || dist(p, BASES[1]) < 1100 || segDist(p, RIVER[0], RIVER[1]) < 200) continue;
-        brush.push(p);
-      }
-    }
   // bases: stone plazas with tile rings
   BASES.forEach((b, team) => {
-    const g = m.createRadialGradient(b.x, b.y, 100, b.x, b.y, 980);
+    const g = m.createRadialGradient(b.x, b.y, 200, b.x, b.y, 3000);
     g.addColorStop(0, '#9a917a');
-    g.addColorStop(0.7, '#857c66');
+    g.addColorStop(0.75, '#857c66');
     g.addColorStop(1, 'rgba(110,100,80,0)');
     m.fillStyle = g;
     m.beginPath();
-    m.arc(b.x, b.y, 980, 0, Math.PI * 2);
+    m.arc(b.x, b.y, 3000, 0, Math.PI * 2);
     m.fill();
     m.strokeStyle = 'rgba(60,52,40,0.35)';
-    m.lineWidth = 4;
-    for (let r = 160; r < 900; r += 85) {
+    m.lineWidth = 8;
+    for (let r = 300; r < 2800; r += 170) {
       m.beginPath();
       m.arc(b.x, b.y, r, 0, Math.PI * 2);
       m.stroke();
-      for (let a = 0; a < Math.PI * 2; a += 340 / r) {
+      for (let a = 0; a < Math.PI * 2; a += 680 / r) {
         m.beginPath();
         m.moveTo(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r);
-        m.lineTo(b.x + Math.cos(a) * (r + 85), b.y + Math.sin(a) * (r + 85));
+        m.lineTo(b.x + Math.cos(a) * (r + 170), b.y + Math.sin(a) * (r + 170));
         m.stroke();
       }
     }
     m.strokeStyle = team ? 'rgba(200,70,60,0.55)' : 'rgba(70,140,230,0.55)';
-    m.lineWidth = 14;
+    m.lineWidth = 24;
     m.beginPath();
     m.arc(b.x, b.y, FOUNTAIN_R, 0, Math.PI * 2);
     m.stroke();
@@ -227,12 +228,12 @@ minimapCanvas.width = minimapCanvas.height = 440;
   const m = minimapCanvas.getContext('2d')!;
   m.drawImage(groundCanvas, 0, 0, 440, 440);
   m.scale(440 / MAP, 440 / MAP);
-  for (const t of trees) {
-    m.fillStyle = t.v < 0.5 ? '#1d3b22' : '#24472a';
-    m.beginPath();
-    m.arc(t.x, t.y, 60 * t.s, 0, Math.PI * 2);
-    m.fill();
-  }
+  for (let gy = 0; gy < GN; gy++)
+    for (let gx = 0; gx < GN; gx++)
+      if (blocked[gy * GN + gx]) {
+        m.fillStyle = (gx + gy) % 2 ? '#1d3b22' : '#21422a';
+        m.fillRect(gx * CELL, gy * CELL, CELL + 1, CELL + 1);
+      }
 })();
 
 const groundTex = new THREE.CanvasTexture(groundCanvas);
@@ -244,7 +245,7 @@ ground.position.set(MAP / 2, 0, MAP / 2);
 ground.receiveShadow = true;
 scene.add(ground);
 // dark forest beyond the playable edge
-const outer = new THREE.Mesh(new THREE.PlaneGeometry(MAP * 3, MAP * 3), new THREE.MeshLambertMaterial({ color: '#1a2e1b' }));
+const outer = new THREE.Mesh(new THREE.PlaneGeometry(MAP * 3, MAP * 3), new THREE.MeshLambertMaterial({ color: '#16281a' }));
 outer.rotation.x = -Math.PI / 2;
 outer.position.set(MAP / 2, -2, MAP / 2);
 scene.add(outer);
@@ -258,7 +259,7 @@ const riverMat = new THREE.ShaderMaterial({
   fragmentShader: `varying vec2 vUv; uniform float uTime;
     void main(){
       float edge = smoothstep(0.0, 0.22, vUv.y) * smoothstep(1.0, 0.78, vUv.y);
-      vec2 p = vec2(vUv.x * 60.0, vUv.y * 4.0);
+      vec2 p = vec2(vUv.x * 160.0, vUv.y * 9.0);
       float w = sin(p.x * 1.3 + uTime * 1.4 + sin(p.y * 3.0 + uTime) * 1.5) * 0.5 + 0.5;
       float w2 = sin(p.x * 2.7 - uTime * 1.1 + p.y * 5.0) * 0.5 + 0.5;
       float caustic = pow(w * w2, 4.0);
@@ -270,7 +271,7 @@ const riverMat = new THREE.ShaderMaterial({
 });
 {
   const len = dist(RIVER[0], RIVER[1]);
-  const river = new THREE.Mesh(new THREE.PlaneGeometry(len, 300), riverMat);
+  const river = new THREE.Mesh(new THREE.PlaneGeometry(len, 900), riverMat);
   river.rotation.x = -Math.PI / 2;
   river.rotation.z = -Math.atan2(RIVER[1].y - RIVER[0].y, RIVER[1].x - RIVER[0].x);
   river.position.set((RIVER[0].x + RIVER[1].x) / 2, 1.5, (RIVER[0].y + RIVER[1].y) / 2);
@@ -293,19 +294,6 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: { m: TH
 {
   const M = (x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0) =>
     new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(sx, sy, sz));
-  // a ring of border trees frames the map edge
-  for (let a = 0; a < MAP * 4; a += 110) {
-    const side = Math.floor(a / MAP);
-    const t = a % MAP;
-    const off = -60 - rnd() * 120;
-    const p = [
-      { x: t, y: off },
-      { x: MAP - off, y: t },
-      { x: MAP - t, y: MAP - off },
-      { x: off, y: MAP - t },
-    ][side];
-    trees.push({ x: p.x, y: p.y, s: 1 + rnd() * 0.5, v: rnd() });
-  }
   const trunks: { m: THREE.Matrix4 }[] = [];
   const crowns: { m: THREE.Matrix4; c: THREE.Color }[] = [];
   const palette = ['#245a33', '#2f6a35', '#21503f', '#3a7232', '#1d4a33'].map((c) => new THREE.Color(c));
@@ -314,7 +302,7 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: { m: TH
     trunks.push({ m: M(t.x, 40 * s, t.y, 12 * s, 80 * s, 12 * s) });
     const c = palette[Math.floor(t.v * palette.length)].clone().offsetHSL(0, 0, (rnd() - 0.5) * 0.06);
     crowns.push({ m: M(t.x, 110 * s, t.y, 66 * s, 58 * s, 66 * s, rnd() * 6), c });
-    crowns.push({ m: M(t.x + 14 * s, 158 * s, t.y - 8 * s, 46 * s, 44 * s, 46 * s, rnd() * 6), c: c.clone().offsetHSL(0, 0.02, 0.04) });
+    if (!TOUCH) crowns.push({ m: M(t.x + 14 * s, 158 * s, t.y - 8 * s, 46 * s, 44 * s, 46 * s, rnd() * 6), c: c.clone().offsetHSL(0, 0.02, 0.04) });
   }
   instanced(new THREE.CylinderGeometry(0.6, 1, 1, 6), new THREE.MeshLambertMaterial({ color: '#5a3d26' }), trunks, false);
   instanced(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ flatShading: true }), crowns);
@@ -322,10 +310,10 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: { m: TH
   instanced(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ flatShading: true }), rockList);
   // tall brush: clumps of blades, tinted the classic teal-violet
   const blades: { m: THREE.Matrix4; c: THREE.Color }[] = [];
-  for (const b of brush)
-    for (let i = 0; i < 26; i++) {
+  for (const b of BRUSHES)
+    for (let i = 0; i < Math.round(b.r * 0.42); i++) {
       const a = rnd() * Math.PI * 2;
-      const r = Math.sqrt(rnd()) * 95;
+      const r = Math.sqrt(rnd()) * b.r;
       const h = 45 + rnd() * 35;
       blades.push({
         m: new THREE.Matrix4().compose(
@@ -739,6 +727,8 @@ function disposeAvatar(av: Avatar) {
 export function resetUnits() {
   for (const av of avatars.values()) disposeAvatar(av);
   avatars.clear();
+  for (const b of beasts.values()) scene.remove(b.root);
+  beasts.clear();
   for (const s of structs.values()) scene.remove(s.root);
   structs.clear();
 }
@@ -772,7 +762,7 @@ export function syncUnits(units: WUnit[], o: SyncOpts) {
     if (u.kind === 'tower' || u.kind === 'nexus') {
       let s = structs.get(u);
       if (!s) {
-        s = u.kind === 'nexus' ? buildNexus(u.team) : u.tier === 2 ? buildInhib(u.team) : buildTower(u.team);
+        s = u.kind === 'nexus' ? buildNexus(u.team as Team) : u.tier === 3 ? buildInhib(u.team as Team) : buildTower(u.team as Team);
         s.root.position.set(u.x, 0, u.y);
         structs.set(u, s);
       }
@@ -784,7 +774,7 @@ export function syncUnits(units: WUnit[], o: SyncOpts) {
       if (!u.dead) {
         const charge = u.lunge;
         s.crystal.rotation.y = o.time * (u.kind === 'nexus' ? 0.6 : 1.4);
-        const inhib = u.kind === 'tower' && u.tier === 2;
+        const inhib = u.kind === 'tower' && u.tier === 3;
         s.crystal.position.y = (u.kind === 'nexus' ? 170 : inhib ? 120 : 282) + Math.sin(o.time * 2 + u.x) * 6;
         const sc = 1 + 0.25 * charge + (u.hitFlash > 0 ? 0.08 : 0);
         if (inhib) s.crystal.scale.setScalar(sc);
@@ -792,6 +782,11 @@ export function syncUnits(units: WUnit[], o: SyncOpts) {
         if (s.spin) s.spin.rotation.y = o.time * (inhib ? 1.2 : 0.5);
         if (inhib && s.spin) s.spin.rotation.x = Math.sin(o.time * 0.7) * 0.4;
       }
+      continue;
+    }
+    if (u.kind === 'monster' || u.kind === 'ward') {
+      syncBeast(u, o, inView(u.x, u.y, 300));
+      seen.add(u);
       continue;
     }
     if (!modelsReady) continue;
@@ -804,6 +799,16 @@ export function syncUnits(units: WUnit[], o: SyncOpts) {
     }
     seen.add(u);
     animate(av, o, inView(u.x, u.y, 250));
+  }
+  for (const [u, b] of beasts) {
+    if (seen.has(u) && !u.dead) continue;
+    b.dying += o.dt;
+    b.root.position.y = -b.dying * 120;
+    b.root.scale.setScalar(b.scale * Math.max(0.01, 1 - b.dying * 0.8));
+    if (b.dying > 1.2) {
+      scene.remove(b.root);
+      beasts.delete(u);
+    }
   }
   // units that left the simulation (minions die and are removed the same tick)
   for (const [u, av] of avatars) {
@@ -892,7 +897,7 @@ function animate(av: Avatar, o: SyncOpts, visible: boolean) {
   av.root.rotation.y = 0;
   // stealth: enemies don't see you at all, allies see a ghost
   const hidden = (u.stealthT ?? 0) > 0;
-  if (hidden && u.team !== o.viewTeam) av.root.visible = false;
+  if ((hidden && u.team !== o.viewTeam) || u.fogged) av.root.visible = false;
   const ghost = hidden ? 0.35 : 1;
   for (const m of av.mats) {
     if (m.opacity !== ghost) {
@@ -918,6 +923,216 @@ function easeOutBack(t: number) {
   const c1 = 1.70158;
   const c3 = c1 + 1;
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+// ---------- jungle monsters: procedural low-poly creatures ----------
+interface Beast {
+  root: THREE.Group;
+  body: THREE.Group;
+  mats: THREE.MeshStandardMaterial[];
+  scale: number;
+  dying: number;
+  yaw: number;
+  lastX: number;
+  lastY: number;
+  phase: number;
+}
+const beasts = new Map<WUnit, Beast>();
+const mat = (c: string, emissive = 0) => {
+  const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true });
+  if (emissive) {
+    m.emissive = new THREE.Color(c);
+    m.emissiveIntensity = emissive;
+  }
+  return m;
+};
+function addPart(parent: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) {
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.position.set(x, y, z);
+  mesh.scale.set(sx, sy, sz);
+  mesh.castShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+const G_ICO = new THREE.IcosahedronGeometry(1, 0);
+const G_DOD = new THREE.DodecahedronGeometry(1, 0);
+const G_BOX = new THREE.BoxGeometry(1, 1, 1);
+const G_CONE = new THREE.ConeGeometry(1, 1, 5);
+const G_OCT = new THREE.OctahedronGeometry(1, 0);
+const G_SPH = new THREE.SphereGeometry(1, 10, 8);
+// Every creature faces +z; parts are in world units at scale 1.
+function buildBeast(type: string, team: Side): { body: THREE.Group; mats: THREE.MeshStandardMaterial[]; scale: number } {
+  const body = new THREE.Group();
+  const mats: THREE.MeshStandardMaterial[] = [];
+  const M = (c: string, e = 0) => {
+    const m = mat(c, e);
+    mats.push(m);
+    return m;
+  };
+  let scale = 1;
+  switch (type) {
+    case 'azure':
+    case 'ember': {
+      const azure = type === 'azure';
+      const stone = M(azure ? '#5a6a86' : '#7a4a3a');
+      const glow = M(azure ? '#5fb4ff' : '#ff6a2a', 1.8);
+      addPart(body, G_DOD, stone, 0, 90, 0, 62, 70, 52);
+      addPart(body, G_DOD, stone, 0, 160, 18, 34, 30, 32);
+      addPart(body, G_DOD, stone, -66, 110, 10, 26, 46, 26);
+      addPart(body, G_DOD, stone, 66, 110, 10, 26, 46, 26);
+      addPart(body, G_DOD, stone, -66, 50, 18, 30, 30, 30);
+      addPart(body, G_DOD, stone, 66, 50, 18, 30, 30, 30);
+      addPart(body, G_DOD, stone, -28, 24, 0, 22, 26, 22);
+      addPart(body, G_DOD, stone, 28, 24, 0, 22, 26, 22);
+      addPart(body, G_OCT, glow, 0, 104, 44, 16, 22, 10);
+      addPart(body, G_OCT, glow, -12, 166, 44, 5, 5, 5);
+      addPart(body, G_OCT, glow, 12, 166, 44, 5, 5, 5);
+      for (let i = 0; i < 4; i++) addPart(body, G_CONE, glow, -30 + i * 20, 170 + (i % 2) * 14, -20, 8, 40, 8);
+      break;
+    }
+    case 'toad': {
+      const skin = M('#5f7a3a');
+      addPart(body, G_SPH, skin, 0, 60, 0, 80, 58, 76);
+      addPart(body, G_SPH, M('#c8c070'), 0, 44, 28, 62, 34, 52);
+      const eye = M('#f2d34a', 1.2);
+      addPart(body, G_SPH, eye, -30, 112, 40, 14, 14, 14);
+      addPart(body, G_SPH, eye, 30, 112, 40, 14, 14, 14);
+      for (const sx of [-1, 1]) addPart(body, G_SPH, skin, sx * 62, 20, 30, 24, 16, 34);
+      break;
+    }
+    case 'birdBig':
+    case 'bird': {
+      scale = type === 'birdBig' ? 1.4 : 0.85;
+      const feather = M(type === 'birdBig' ? '#8a3a5a' : '#6a3a4a');
+      addPart(body, G_SPH, feather, 0, 46, 0, 26, 28, 36);
+      addPart(body, G_SPH, feather, 0, 74, 26, 16, 16, 16);
+      addPart(body, G_CONE, M('#e8b04a'), 0, 74, 46, 6, 18, 6).rotation.x = Math.PI / 2;
+      for (const sx of [-1, 1]) {
+        const w = addPart(body, G_BOX, feather, sx * 34, 54, -4, 40, 4, 24);
+        w.rotation.z = sx * 0.4;
+      }
+      addPart(body, G_BOX, M('#e8b04a'), -8, 12, 0, 4, 24, 4);
+      addPart(body, G_BOX, M('#e8b04a'), 8, 12, 0, 4, 24, 4);
+      break;
+    }
+    case 'boarBig':
+    case 'boar': {
+      scale = type === 'boarBig' ? 1.35 : 0.85;
+      const hide = M(type === 'boarBig' ? '#5a4030' : '#6a5040');
+      addPart(body, G_SPH, hide, 0, 46, 0, 34, 30, 52);
+      addPart(body, G_SPH, hide, 0, 52, 46, 24, 22, 24);
+      const tusk = M('#efe6cc');
+      for (const sx of [-1, 1]) {
+        const t = addPart(body, G_CONE, tusk, sx * 14, 44, 68, 4, 18, 4);
+        t.rotation.x = -1.1;
+      }
+      for (let i = 0; i < 5; i++) addPart(body, G_CONE, M('#3a2a20'), 0, 76, 20 - i * 12, 5, 18, 5);
+      for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) addPart(body, G_BOX, hide, sx * 18, 14, sz * 26, 9, 28, 9);
+      break;
+    }
+    case 'hulkBig':
+    case 'hulk': {
+      scale = type === 'hulkBig' ? 1.3 : 0.9;
+      const rock = M('#7a7262');
+      addPart(body, G_DOD, rock, 0, 64, 0, 56, 52, 50);
+      addPart(body, G_DOD, rock, 0, 118, 10, 28, 24, 28);
+      addPart(body, G_DOD, rock, -54, 50, 10, 22, 34, 22);
+      addPart(body, G_DOD, rock, 54, 50, 10, 22, 34, 22);
+      addPart(body, G_OCT, M('#ffd27a', 1.2), 0, 118, 36, 8, 5, 4);
+      break;
+    }
+    case 'skitter': {
+      const shell = M('#3a8a8a');
+      addPart(body, G_SPH, shell, 0, 30, 0, 46, 22, 38);
+      addPart(body, G_SPH, M('#8ad8c8', 0.6), 0, 40, 0, 30, 14, 24);
+      for (let i = 0; i < 6; i++) {
+        const sx = i < 3 ? -1 : 1;
+        const leg = addPart(body, G_BOX, shell, sx * 46, 12, -20 + (i % 3) * 20, 22, 4, 4);
+        leg.rotation.z = sx * -0.5;
+      }
+      break;
+    }
+    case 'drake': {
+      const scaleM = M('#4a5a8a');
+      const belly = M('#c8d0e8');
+      const glow = M('#8ad8ff', 1.6);
+      addPart(body, G_SPH, scaleM, 0, 120, 0, 70, 60, 120);
+      addPart(body, G_SPH, belly, 0, 98, 10, 54, 36, 96);
+      const neck = addPart(body, G_SPH, scaleM, 0, 190, 110, 26, 26, 60);
+      neck.rotation.x = -0.6;
+      addPart(body, G_SPH, scaleM, 0, 236, 160, 34, 28, 46);
+      addPart(body, G_OCT, glow, -16, 250, 196, 6, 6, 6);
+      addPart(body, G_OCT, glow, 16, 250, 196, 6, 6, 6);
+      for (const sx of [-1, 1]) {
+        addPart(body, G_CONE, belly, sx * 18, 268, 146, 6, 34, 6).rotation.x = -0.6;
+        const wing = addPart(body, G_BOX, M('#2e3a66'), sx * 140, 170, -10, 190, 6, 110);
+        wing.rotation.z = sx * 0.35;
+        addPart(body, G_BOX, scaleM, sx * 40, 34, 40, 22, 70, 22);
+        addPart(body, G_BOX, scaleM, sx * 40, 34, -60, 22, 70, 22);
+      }
+      const tail = addPart(body, G_CONE, scaleM, 0, 110, -170, 26, 140, 26);
+      tail.rotation.x = -Math.PI / 2;
+      break;
+    }
+    case 'colossus': {
+      const voidM = M('#3a1f4a');
+      const glow = M('#d06aff', 1.8);
+      addPart(body, G_SPH, voidM, 0, 150, 0, 120, 110, 140);
+      addPart(body, G_SPH, voidM, 0, 250, 110, 70, 60, 70);
+      for (let i = 0; i < 3; i++) addPart(body, G_OCT, glow, -36 + i * 36, 262, 172, 10, 14, 6);
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI - Math.PI / 2;
+        const sp = addPart(body, G_CONE, glow, Math.sin(a) * 90, 250, Math.cos(a) * -60, 14, 90, 14);
+        sp.rotation.z = -Math.sin(a) * 0.6;
+      }
+      for (const sx of [-1, 1]) {
+        addPart(body, G_BOX, voidM, sx * 110, 60, 50, 40, 120, 40);
+        addPart(body, G_BOX, voidM, sx * 100, 60, -70, 40, 120, 40);
+      }
+      break;
+    }
+    case 'ward': {
+      const c = team === 0 ? '#5fb4ff' : team === 1 ? '#ff6a5a' : '#ffd27a';
+      addPart(body, G_BOX, M('#6a5a40'), 0, 24, 0, 6, 48, 6);
+      addPart(body, G_OCT, M(c, 2), 0, 62, 0, 14, 20, 14);
+      break;
+    }
+  }
+  return { body, mats, scale };
+}
+function syncBeast(u: WUnit, o: SyncOpts, visible: boolean) {
+  let b = beasts.get(u);
+  if (!b) {
+    if (u.dead) return;
+    const built = buildBeast(u.kind === 'ward' ? 'ward' : u.monster ?? 'boar', u.team);
+    const root = new THREE.Group();
+    root.add(built.body);
+    scene.add(root);
+    b = { root, body: built.body, mats: built.mats, scale: built.scale, dying: 0, yaw: 0, lastX: u.x, lastY: u.y, phase: Math.random() * 6 };
+    beasts.set(u, b);
+  }
+  if (u.dead) return;
+  b.dying = 0;
+  b.root.visible = visible && !u.fogged && !((u.stealthT ?? 0) > 0 && u.team !== o.viewTeam);
+  const dx = u.x - b.lastX;
+  const dy = u.y - b.lastY;
+  b.lastX = u.x;
+  b.lastY = u.y;
+  const moving = Math.hypot(dx, dy) > 0.5;
+  const want = moving ? Math.atan2(dx, dy) : Math.PI / 2 - u.face;
+  if (moving || u.lunge > 0) b.yaw = lerpAngle(b.yaw, want, Math.min(1, o.dt * 10));
+  const lunge = u.lunge > 0 ? Math.sin((1 - u.lunge) * Math.PI) : 0;
+  const k = u.pop * u.pop;
+  b.root.position.set(u.x + u.lx * lunge * 24, 0, u.y + u.ly * lunge * 24);
+  b.root.rotation.y = b.yaw;
+  b.root.scale.set(b.scale * (1 + 0.08 * k), b.scale * (1 - 0.08 * k), b.scale * (1 + 0.08 * k));
+  // idle breathing, walking bounce, flying for birds and the drake
+  const t = o.time + b.phase;
+  const fly = u.monster === 'bird' || u.monster === 'birdBig' ? 30 + Math.sin(t * 6) * 10 : u.monster === 'drake' ? Math.sin(t * 1.5) * 10 : 0;
+  b.body.position.y = fly + (moving ? Math.abs(Math.sin(t * 10)) * 8 : Math.sin(t * 2) * 3);
+  b.body.rotation.x = lunge * 0.25;
+  const flash = u.hitFlash > 0 ? 0.5 : o.hovered === u ? 0.25 : 0;
+  for (const m of b.mats) if (m.emissiveIntensity < 1) m.emissive.setRGB(flash, flash * (o.hovered === u && !u.hitFlash ? 0.1 : 1), flash * (o.hovered === u && !u.hitFlash ? 0.1 : 1));
 }
 
 // ---------- ground decals: a canvas laid on the ground under every unit ----------

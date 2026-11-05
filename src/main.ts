@@ -14,8 +14,12 @@ import {
   RIVER,
   TEAM_COLOR,
   TEAM_NAME,
+  TURRET_AT,
+  INHIB_AT,
   WAVE_INTERVAL,
 } from './data';
+import { BRUSHES, brushOf, CAMPS, findPath, isWall, lineClear, pushOut } from './terrain';
+import type { CampDef, MonsterType } from './terrain';
 import {
   addTrauma,
   burst as fxBurst,
@@ -40,10 +44,20 @@ import { ACCEPT_TIME, BOT_MMR, loadRating, mmAccept, mmActive, mmCancel, mmDecli
 import type { MatchInfo, Mode } from './mm';
 import type { BurstOpts, Particle } from './fx';
 import { beginDecals, canvas3d, endDecals, HK, K, loadModels, minimapCanvas, renderPortraits, renderWorld, resetUnits, syncUnits, unitHeight } from './world3d';
-import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Team, Vec } from './data';
+import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Side, Team, Vec } from './data';
 
 // ================= types =================
-type Kind = 'champ' | 'minion' | 'tower' | 'nexus';
+type Kind = 'champ' | 'minion' | 'tower' | 'nexus' | 'monster' | 'ward';
+type Role = 'top' | 'jungle' | 'mid' | 'adc' | 'support';
+const ROLES: Role[] = ['top', 'jungle', 'mid', 'adc', 'support'];
+const ROLE_NAME: Record<Role, string> = { top: 'Top', jungle: 'Jungle', mid: 'Mid', adc: 'Bot', support: 'Support' };
+const ROLE_LANE: Record<Role, number> = { top: 0, jungle: 1, mid: 1, adc: 2, support: 2 };
+// structure tiers along each lane, outermost first
+const T_OUTER = 0;
+const T_INNER = 1;
+const T_BASE = 2; // inhibitor turret
+const T_INHIB = 3;
+const T_NEXUS = 4;
 type MinionType = 'melee' | 'caster' | 'siege' | 'super';
 interface Buff {
   as: number;
@@ -87,11 +101,17 @@ interface Champ {
   buildIdx: number;
   ranks: number[]; // points in Q W E R; one point per level, R at 6/11/16
   empower: { dmg: number; a: AbilityDef } | null; // bonus on the next basic attack
+  role: Role;
+  spell2: 'heal' | 'smite';
+  azureT: number; // jungle buffs, seconds left
+  emberT: number;
+  wards: number; // trinket charges
+  wardCd: number;
 }
 interface Unit {
   id: number;
   kind: Kind;
-  team: Team;
+  team: Side;
   x: number;
   y: number;
   r: number;
@@ -139,6 +159,17 @@ interface Unit {
   stealthT: number; // untargetable + hidden from enemies
   airT: number; // knocked up (stunned while airborne)
   push: { tx: number; ty: number; speed: number } | null; // forced movement: hooks, knockbacks
+  path: Vec[]; // waypoints around walls
+  pathGoal: Vec | null;
+  pathT: number;
+  monster: MonsterType | null;
+  camp: number; // camp id for monsters
+  home: Vec | null; // where a monster resets to
+  leashT: number; // seconds since a monster was last hurt by its target
+  resetting: boolean;
+  heat: number; // turret warm-up against champions
+  plates: number; // outer turret plating left
+  life: number; // wards: seconds left
 }
 interface Zone {
   x: number;
@@ -148,7 +179,7 @@ interface Zone {
   dur: number;
   tick: number; // next damage tick in
   owner: Unit;
-  team: Team;
+  team: Side;
   a: AbilityDef;
   dmg: number; // per second, or per trigger for traps
   heal: number; // per second to allies
@@ -165,7 +196,7 @@ interface Proj {
   max: number;
   width: number;
   owner: Unit;
-  team: Team;
+  team: Side;
   dmg: number;
   dmgType: DmgType;
   pierce: boolean;
@@ -209,6 +240,12 @@ interface Game {
   projs: Proj[];
   pending: Pending[];
   zones: Zone[];
+  camps: CampState[];
+  drakes: [number, number];
+  colossus: [number, number]; // buff ends at this game time
+  seen: [Set<Unit>, Set<Unit>]; // what each team can see (fog of war)
+  visionT: number;
+  platesGone: boolean;
   fx: Fx[];
   texts: FText[];
   nextWave: number;
@@ -235,7 +272,7 @@ type Ev =
   | ['t', number, number, string, string, number]
   | ['i', number, number, keyof typeof TIER]
   | ['tr', number, number, number]
-  | ['f', string, Team | -1]
+  | ['f', string, Side | -1]
   | ['a', string, 'good' | 'bad' | 'neutral', string]
   | ['k', number, number, number]
   | ['tv', number, number, number, string, string, number];
@@ -309,7 +346,7 @@ function polyDist(p: Vec, poly: Vec[]): number {
   for (let i = 1; i < poly.length; i++) m = Math.min(m, segDist(p, poly[i - 1], poly[i]));
   return m;
 }
-const lanePoly = (lane: number, team: Team) => (team === 0 ? LANES[lane] : [...LANES[lane]].reverse());
+const lanePoly = (lane: number, team: Side) => (team === 0 ? LANES[lane] : [...LANES[lane]].reverse());
 const fmtTime = (t: number) =>
   `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
@@ -348,6 +385,17 @@ function makeUnit(p: Partial<Unit> & Pick<Unit, 'kind' | 'team' | 'x' | 'y'>): U
     stealthT: 0,
     airT: 0,
     push: null,
+    path: [],
+    pathGoal: null,
+    pathT: 0,
+    monster: null,
+    camp: -1,
+    home: null,
+    leashT: 0,
+    resetting: false,
+    heat: 0,
+    plates: 0,
+    life: 0,
     name: '',
     champ: null,
     lane: 0,
@@ -417,13 +465,16 @@ function recalc(u: Unit) {
   c.ls = ls;
 }
 
-function makeChamp(def: ChampDef, team: Team, lane: number, isPlayer: boolean): Unit {
+function makeChamp(def: ChampDef, team: Team, role: Role, isPlayer: boolean): Unit {
   const b = BASES[team];
+  const lane = ROLE_LANE[role];
+  const slot = ROLES.indexOf(role) - 2;
+  const dir = team ? -1 : 1;
   const u = makeUnit({
     kind: 'champ',
     team,
-    x: b.x + (lane - 1) * 70,
-    y: b.y - (lane - 1) * 70,
+    x: b.x + slot * 85 * dir + 140 * dir,
+    y: b.y - slot * 85 * dir - 140 * dir,
     r: 28,
     name: def.name,
   });
@@ -454,6 +505,12 @@ function makeChamp(def: ChampDef, team: Team, lane: number, isPlayer: boolean): 
     buildIdx: 0,
     ranks: [0, 0, 0, 0],
     empower: null,
+    role,
+    spell2: role === 'jungle' ? 'smite' : 'heal',
+    azureT: 0,
+    emberT: 0,
+    wards: 2,
+    wardCd: 0,
   };
   u.maxHp = 0;
   recalc(u);
@@ -465,8 +522,40 @@ interface Human {
   peer: string; // 'host' for the local player
   name: string;
   pick: string;
-  team?: Team; // ranked 3v3 puts humans on both sides; co-op keeps everyone on Blue
+  team?: Team; // ranked puts humans on both sides; co-op keeps everyone on Blue
+  role?: Role | 'fill';
 }
+// Everyone gets their preferred role if it's free; the rest are filled in order.
+function assignRoles(side: Human[]): Map<Human, Role> {
+  const out = new Map<Human, Role>();
+  const free = new Set<Role>(ROLES);
+  for (const h of side)
+    if (h.role && h.role !== 'fill' && free.has(h.role)) {
+      out.set(h, h.role);
+      free.delete(h.role);
+    }
+  for (const h of side)
+    if (!out.has(h)) {
+      const r = [...free][0];
+      out.set(h, r);
+      free.delete(r);
+    }
+  return out;
+}
+const ROLE_TAGS: Record<Role, string[]> = {
+  top: ['Fighter', 'Tank'],
+  jungle: ['Assassin', 'Fighter'],
+  mid: ['Mage', 'Assassin'],
+  adc: ['Marksman'],
+  support: ['Support', 'Tank'],
+};
+function botPick(role: Role, taken: Set<string>): ChampDef {
+  const free = CHAMPS.filter((c) => !taken.has(c.id));
+  const fit = free.filter((c) => (c.tags ?? []).some((t) => ROLE_TAGS[role].includes(t)));
+  const pool = fit.length ? fit : free.length ? free : CHAMPS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+let soloRole: Role | 'fill' = 'mid';
 function newGame(champId: string, humans: Human[] = []) {
   NEXT_ID = 1;
   firstBlood = true;
@@ -477,36 +566,42 @@ function newGame(champId: string, humans: Human[] = []) {
   shake.trauma = 0;
   resetUnits();
   const units: Unit[] = [];
+  const TURRET = [
+    { hp: 5000, ad: 170, name: 'Outer' },
+    { hp: 3600, ad: 190, name: 'Inner' },
+    { hp: 3300, ad: 210, name: 'Inhibitor' },
+  ];
   for (const team of [0, 1] as Team[]) {
     for (let lane = 0; lane < 3; lane++) {
       const poly = lanePoly(lane, team);
-      const len = polyLen(poly);
-      [0.36, 0.22].forEach((f, tier) => {
-        const p = pointAt(poly, len * f);
-        units.push(
-          makeUnit({
-            kind: 'tower',
-            team,
-            x: p.x,
-            y: p.y,
-            r: 42,
-            hp: tier ? 4000 : 3500,
-            maxHp: tier ? 4000 : 3500,
-            ad: tier ? 200 : 180,
-            armor: 40,
-            mr: 40,
-            range: 775,
-            as: 0.85,
-            lane,
-            tier,
-            name: `${LANE_NAMES[lane]} ${tier ? 'Inner' : 'Outer'} Turret`,
-          }),
-        );
+      const at = lane === 1 ? TURRET_AT.mid : TURRET_AT.side;
+      at.forEach((d, tier) => {
+        const p = pointAt(poly, d);
+        const T = TURRET[tier];
+        const tw = makeUnit({
+          kind: 'tower',
+          team,
+          x: p.x,
+          y: p.y,
+          r: 42,
+          hp: T.hp,
+          maxHp: T.hp,
+          ad: T.ad,
+          armor: 40,
+          mr: 40,
+          range: 700,
+          as: 0.83,
+          lane,
+          tier,
+          name: `${LANE_NAMES[lane]} ${T.name} Turret`,
+        });
+        if (tier === T_OUTER) tw.plates = 5; // plating falls off at 14:00
+        units.push(tw);
       });
       // inhibitor: no attack, rebuilds itself, and while down the enemy spawns super minions here
-      const ip = pointAt(poly, Math.max(430, len * 0.11));
+      const ip = pointAt(poly, INHIB_AT);
       units.push(
-        makeUnit({ kind: 'tower', team, x: ip.x, y: ip.y, r: 46, hp: 3000, maxHp: 3000, armor: 20, mr: 20, range: 0, lane, tier: 2, name: `${LANE_NAMES[lane]} Inhibitor` }),
+        makeUnit({ kind: 'tower', team, x: ip.x, y: ip.y, r: 46, hp: 4000, maxHp: 4000, armor: 20, mr: 20, range: 0, lane, tier: T_INHIB, name: `${LANE_NAMES[lane]} Inhibitor` }),
       );
     }
     // two nexus turrets stand between the inhibitors and the nexus
@@ -520,44 +615,49 @@ function newGame(champId: string, humans: Human[] = []) {
         makeUnit({
           kind: 'tower',
           team,
-          x: nx.x + fx * 210 - fy * side * 140,
-          y: nx.y + fy * 210 + fx * side * 140,
+          x: nx.x + fx * 330 - fy * side * 210,
+          y: nx.y + fy * 330 + fx * side * 210,
           r: 42,
           hp: 2700,
           maxHp: 2700,
-          ad: 190,
+          ad: 200,
           armor: 40,
           mr: 40,
-          range: 775,
-          as: 0.85,
+          range: 700,
+          as: 0.83,
           lane: 1,
-          tier: 3,
+          tier: T_NEXUS,
           name: 'Nexus Turret',
         }),
       );
     units.push(
-      makeUnit({ kind: 'nexus', team, ...NEXUS[team], r: 80, hp: 5000, maxHp: 5000, name: 'Nexus' }),
+      makeUnit({ kind: 'nexus', team, ...NEXUS[team], r: 90, hp: 5500, maxHp: 5500, name: 'Nexus' }),
     );
   }
-  // humans take lanes mid -> top -> bot on their side; bots fill the rest with champions nobody picked
+  // 5v5: humans take their roles; bots fill the rest with champions suited to the role
   remote.clear();
-  const all: Human[] = humans.length ? humans : [{ peer: 'host', name: '', pick: champId, team: 0 }];
-  const taken = all.map((h) => h.pick);
-  const spare = [...CHAMPS.filter((c) => !taken.includes(c.id))].sort(() => Math.random() - 0.5);
+  const all: Human[] = humans.length ? humans : [{ peer: 'host', name: '', pick: champId, team: 0, role: soloRole }];
+  const taken = new Set(all.map((h) => h.pick));
   const slots: Unit[] = [];
   for (const team of [0, 1] as Team[]) {
     const side = all.filter((h) => (h.team ?? 0) === team);
-    [1, 0, 2].forEach((lane, i) => {
-      const h = side[i];
+    const roles = assignRoles(side);
+    for (const role of ROLES) {
+      const h = side.find((x) => roles.get(x) === role);
       if (h) {
-        const def = CHAMPS.find((c) => c.id === h.pick) ?? spare.shift() ?? CHAMPS[0];
-        const u = makeChamp(def, team, lane, true);
+        const def = CHAMPS.find((c) => c.id === h.pick) ?? botPick(role, taken);
+        taken.add(def.id);
+        const u = makeChamp(def, team, role, true);
         if (h.name) u.name = h.name;
         if (h.peer === 'host') slots.push(u);
         else remote.set(h.peer, u);
         units.push(u);
-      } else units.push(makeChamp(spare.shift() ?? CHAMPS[Math.floor(Math.random() * CHAMPS.length)], team, lane, false));
-    });
+      } else {
+        const def = botPick(role, taken);
+        taken.add(def.id);
+        units.push(makeChamp(def, team, role, false));
+      }
+    }
   }
   const player = slots[0];
   if (!player) throw new Error('host has no champion');
@@ -568,6 +668,12 @@ function newGame(champId: string, humans: Human[] = []) {
     projs: [],
     pending: [],
     zones: [],
+    camps: [],
+    drakes: [0, 0],
+    colossus: [0, 0],
+    seen: [new Set(), new Set()],
+    visionT: 0,
+    platesGone: false,
     fx: [],
     texts: [],
     nextWave: FIRST_WAVE,
@@ -578,10 +684,11 @@ function newGame(champId: string, humans: Human[] = []) {
     player,
     cam: { x: player.x, y: player.y },
     camLocked: true,
-    zoom: 1,
+    zoom: matchMedia('(pointer: coarse)').matches ? 0.7 : 0.62,
     marker: null,
     focus: null,
   };
+  G.camps = CAMPS.map((def) => ({ def, next: def.first, mobs: [], announced: false }));
   for (const u of units) if (u.champ && u !== player) aiShop(u);
   buildHud();
   feedMsg(`Welcome to the Rift (${difficulty.name}). Minions spawn in 8 seconds.`, -1);
@@ -598,14 +705,14 @@ function targetable(t: Unit): boolean {
 // turrets; both nexus turrets open the nexus.
 function refreshOpenStructures() {
   G.open.clear();
-  const down = (team: Team, tier: number, lane?: number) =>
+  const down = (team: Side, tier: number, lane?: number) =>
     G.units.some((o) => o.kind === 'tower' && o.team === team && o.tier === tier && o.dead && (lane === undefined || o.lane === lane));
   for (const t of G.units) {
     if (t.dead) continue;
     if (t.kind === 'tower') {
-      if (t.tier === 0 || (t.tier < 3 && down(t.team, t.tier - 1, t.lane)) || (t.tier === 3 && down(t.team, 2))) G.open.add(t);
+      if (t.tier === T_OUTER || (t.tier <= T_INHIB && down(t.team, t.tier - 1, t.lane)) || (t.tier === T_NEXUS && down(t.team, T_INHIB))) G.open.add(t);
     } else if (t.kind === 'nexus') {
-      if (G.units.filter((o) => o.kind === 'tower' && o.team === t.team && o.tier === 3 && o.dead).length >= 2) G.open.add(t);
+      if (G.units.filter((o) => o.kind === 'tower' && o.team === t.team && o.tier === T_NEXUS && o.dead).length >= 2) G.open.add(t);
     }
   }
 }
@@ -681,11 +788,19 @@ let announceTimer = 0;
 function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType): number {
   if (!targetable(t) || amt <= 0) return 0;
   const res = type === 'phys' ? t.armor : type === 'magic' ? t.mr : 0;
-  const mult = src.champ ? diffOf(src).dmg : 1;
+  let mult = src.champ ? diffOf(src).dmg : 1;
+  // Storm Drake: each drake the team owns adds 5% damage
+  if (src.champ && src.team < 2) mult *= 1 + 0.05 * G.drakes[src.team as Team];
+  if (src.champ && t.kind === 'monster' && src.champ.spell2 === 'smite') mult *= 1.75; // jungle companion: junglers clear faster
+  // Abyssal Colossus: empowered minions near the team's champions
+  if (src.kind === 'minion' && colossusOn(src.team) && G.units.some((c) => c.champ && !c.dead && c.team === src.team && dist(c, src) < 900)) mult *= 1.5;
+  if (t.kind === 'minion' && colossusOn(t.team) && G.units.some((c) => c.champ && !c.dead && c.team === t.team && dist(c, t) < 900)) mult *= 0.6;
   const dmg = amt * mult * (100 / (100 + Math.max(0, res)));
   const soak = Math.min(t.shield, dmg);
   t.shield -= soak;
   t.hp -= dmg - soak;
+  if (t.kind === 'monster' && src.kind === 'champ') monsterAggro(t, src);
+  if (t.plates > 0 && src.champ) checkPlates(t);
   t.hitFlash = 0.12;
   if (t.kind === 'champ' || t.kind === 'minion') t.pop = Math.min(1, t.pop + (dmg > 40 ? 1 : 0.6));
   if (dmg > 4) {
@@ -854,6 +969,17 @@ function kill(t: Unit, src: Unit) {
   const foes = G.units.filter((c) => c.champ && !c.dead && c.team !== t.team && dist(c, t) < 1400);
 
   deathFx(t);
+  if (t.kind === 'monster') {
+    monsterKilled(t, killer);
+    return;
+  }
+  if (t.kind === 'ward') return;
+  // champions drop their jungle blessings to whoever kills them
+  if (t.champ && killer?.champ) {
+    if (t.champ.azureT > 0) killer.champ.azureT = Math.max(killer.champ.azureT, t.champ.azureT);
+    if (t.champ.emberT > 0) killer.champ.emberT = Math.max(killer.champ.emberT, t.champ.emberT);
+  }
+  if (t.champ) t.champ.azureT = t.champ.emberT = 0;
   if (t.kind === 'minion') {
     if (killer === G.player) sfx('coin');
     if (killer === G.player && onScreen(t))
@@ -870,7 +996,7 @@ function kill(t: Unit, src: Unit) {
   } else if (t.champ) {
     const c = t.champ;
     c.deaths++;
-    c.respawnT = 6 + c.level * 1.8;
+    c.respawnT = 8 + c.level * 2.5;
     c.order = null;
     c.dash = null;
     c.buffs = [];
@@ -878,7 +1004,7 @@ function kill(t: Unit, src: Unit) {
     c.retreating = false;
     if (killer && killer.team !== t.team) {
       killer.champ!.kills++;
-      G.kills[killer.team]++;
+      G.kills[killer.team as Team]++;
       giveGold(killer, 300);
       for (const [d, time] of c.damagers) {
         if (d !== killer && G.t - time < 10) {
@@ -894,11 +1020,11 @@ function kill(t: Unit, src: Unit) {
     } else feedMsg(`${t.name} was executed`, (1 - t.team) as Team);
     c.damagers.clear();
   } else if (t.kind === 'tower') {
-    for (const c of G.units) if (c.champ && c.team !== t.team) giveGold(c, t.tier === 2 ? 50 : 150);
+    for (const c of G.units) if (c.champ && c.team !== t.team) giveGold(c, t.tier === T_INHIB ? 50 : t.tier === T_OUTER ? 250 : 150);
     feedMsg(`${TEAM_NAME[1 - t.team]} destroyed the ${TEAM_NAME[t.team]} ${t.name}`, (1 - t.team) as Team);
     const mine = t.team === G.player.team;
-    if (t.tier === 2) {
-      t.reviveT = 150;
+    if (t.tier === T_INHIB) {
+      t.reviveT = 300;
       announce(mine ? 'Your inhibitor has been destroyed' : 'Inhibitor destroyed', mine ? 'bad' : 'good', mine ? 'Enemy super minions are coming' : 'Your super minions will spawn');
     } else announce(mine ? 'Your turret has been destroyed' : 'Turret destroyed', mine ? 'bad' : 'good');
   } else if (t.kind === 'nexus') {
@@ -936,6 +1062,11 @@ function performAttack(u: Unit, t: Unit) {
     type = 'true';
   }
   if (u.kind === 'minion' && t.kind === 'champ') dmg *= 0.6;
+  if (u.kind === 'tower' && t.kind === 'champ') {
+    dmg *= 1 + u.heat;
+    u.heat = Math.min(1.2, u.heat + 0.4); // turret warm-up: +40% per consecutive shot on a champion
+  } else if (u.kind === 'tower') u.heat = 0;
+  if (u.kind === 'monster' && t.champ?.spell2 === 'smite') dmg *= 0.55; // and take less from monsters
   const ang = Math.atan2(t.y - u.y, t.x - u.x);
   u.lunge = 1;
   u.revealT = 1.2;
@@ -979,6 +1110,12 @@ function performAttack(u: Unit, t: Unit) {
 function applyAuto(u: Unit, t: Unit, dmg: number, type: DmgType) {
   const emp = u.champ?.empower;
   const done = dealDamage(u, t, dmg, type);
+  // Ember blessing: attacks burn and slow
+  if (u.champ && u.champ.emberT > 0 && !t.dead && (t.kind === 'champ' || t.kind === 'monster' || t.kind === 'minion')) {
+    dealDamage(u, t, 8 + 2 * u.champ.level, 'true');
+    t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, 0.1);
+    t.slowT = Math.max(t.slowT, 1);
+  }
   if (emp && !t.dead && t.kind !== 'tower' && t.kind !== 'nexus') {
     u.champ!.empower = null;
     hitEnemy(u, t, emp.a, emp.dmg);
@@ -998,15 +1135,35 @@ function tryAttack(u: Unit, t: Unit) {
 
 const inRange = (u: Unit, t: Unit) => dist(u, t) <= u.range + u.r + t.r;
 
-function moveToward(u: Unit, x: number, y: number, dt: number): boolean {
-  const dx = x - u.x;
-  const dy = y - u.y;
+// Walks toward (x, y), routing around jungle walls with A* when there's no straight line.
+function moveToward(u: Unit, x: number, y: number, dt: number, speedMul = 1): boolean {
+  let tx = x;
+  let ty = y;
+  const goal = { x, y };
+  if (!lineClear(u, goal, 60)) {
+    if (!u.pathGoal || dist(u.pathGoal, goal) > 140 || u.pathT <= 0 || !u.path.length) {
+      u.path = findPath(u, goal);
+      u.pathGoal = goal;
+      u.pathT = 1.2;
+    }
+    while (u.path.length > 1 && dist(u, u.path[0]) < 40) u.path.shift();
+    if (u.path.length) {
+      tx = u.path[0].x;
+      ty = u.path[0].y;
+    }
+  } else if (u.path.length) {
+    u.path = [];
+    u.pathGoal = null;
+  }
+  const dx = tx - u.x;
+  const dy = ty - u.y;
   const d = Math.hypot(dx, dy);
-  const step = effMS(u) * dt;
+  const step = effMS(u) * speedMul * dt;
   if (d <= step || d < 1) {
-    u.x = x;
-    u.y = y;
-    return true;
+    u.x = tx;
+    u.y = ty;
+    if (tx !== x || ty !== y) u.path.shift();
+    return tx === x && ty === y;
   }
   u.x += (dx / d) * step;
   u.y += (dy / d) * step;
@@ -1017,7 +1174,8 @@ function nearestEnemy(u: Unit, radius: number, pred: (e: Unit) => boolean): Unit
   let best: Unit | null = null;
   let bd = radius;
   for (const e of G.units) {
-    if (e.team === u.team || !targetable(e) || !pred(e)) continue;
+    // monsters are only fought on purpose; fogged enemies can't be auto-targeted
+    if (e.team === u.team || e.kind === 'monster' || e.kind === 'ward' || !targetable(e) || !pred(e) || !isSeen(u.team, e)) continue;
     const d = dist(u, e) - e.r;
     if (d < bd) {
       bd = d;
@@ -1027,7 +1185,7 @@ function nearestEnemy(u: Unit, radius: number, pred: (e: Unit) => boolean): Unit
   return best;
 }
 
-function towerCovering(p: Vec, towerTeam: Team, pad = 0): Unit | null {
+function towerCovering(p: Vec, towerTeam: Side, pad = 0): Unit | null {
   for (const t of G.units)
     if (t.kind === 'tower' && !t.dead && t.team === towerTeam && dist(t, p) <= t.range + pad) return t;
   return null;
@@ -1082,8 +1240,8 @@ function giveShield(t: Unit, amt: number, time: number, color: string) {
   if (onScreen(t)) ring(t.x, t.y, t.r + 22, color, 0.4, 6);
 }
 
-function enemiesIn(team: Team, test: (e: Unit) => boolean): Unit[] {
-  return G.units.filter((e) => e.team !== team && (e.kind === 'champ' || e.kind === 'minion') && targetable(e) && test(e));
+function enemiesIn(team: Side, test: (e: Unit) => boolean): Unit[] {
+  return G.units.filter((e) => e.team !== team && (e.kind === 'champ' || e.kind === 'minion' || e.kind === 'monster') && targetable(e) && test(e));
 }
 
 function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
@@ -1272,7 +1430,7 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
   return true;
 }
 // each rank shaves 6% off the cooldown
-const cdOf = (c: Champ, slot: number) => c.def.abilities[slot].cd * (1 - 0.06 * Math.max(0, c.ranks[slot] - 1)) * (100 / (100 + c.haste));
+const cdOf = (c: Champ, slot: number) => c.def.abilities[slot].cd * (1 - 0.06 * Math.max(0, c.ranks[slot] - 1)) * (100 / (100 + c.haste + (c.azureT > 0 ? 20 : 0)));
 const beams: { sx: number; sy: number; ex: number; ey: number; w: number; t: number; color: string }[] = [];
 
 function castFlash(u: Unit, tx: number, ty: number) {
@@ -1283,6 +1441,7 @@ function castFlash(u: Unit, tx: number, ty: number) {
   burst(u.x, u.y, 14, { color: '#fff6a8', speed: 380, life: 0.3, size: 3 });
   u.x = clamp(u.x + ((tx - u.x) / d) * reach, 40, MAP - 40);
   u.y = clamp(u.y + ((ty - u.y) / d) * reach, 40, MAP - 40);
+  pushOut(u); // flashing into a wall lands on the nearest floor
   burst(u.x, u.y, 18, { kind: 'ember', color: '#fff6a8', speed: 300, life: 0.4, size: 4 });
   ring(u.x, u.y, 70, '#fff6a8', 0.35, 6);
   c.spellCds[0] = 180;
@@ -1292,7 +1451,7 @@ function castFlash(u: Unit, tx: number, ty: number) {
 }
 function castHeal(u: Unit) {
   const c = u.champ!;
-  if (u.dead || c.spellCds[1] > 0) return;
+  if (u.dead || c.spellCds[1] > 0 || c.spell2 !== 'heal') return;
   heal(u, 90 + 20 * c.level);
   c.buffs.push({ as: 0, ms: 0.3, t: 1.2 });
   c.spellCds[1] = 150;
@@ -1304,7 +1463,7 @@ function castHeal(u: Unit) {
 function startRecall(u: Unit) {
   const c = u.champ!;
   if (u.dead || c.recallT > 0) return;
-  c.recallT = 4;
+  c.recallT = colossusOn(u.team) ? 4 : 8;
   if (u === G.player) sfx('recall');
   c.order = null;
 }
@@ -1319,7 +1478,7 @@ function spawnWave() {
   for (const team of [0, 1] as Team[]) {
     for (let lane = 0; lane < 3; lane++) {
       const poly = lanePoly(lane, team);
-      const inhibDown = G.units.some((o) => o.kind === 'tower' && o.tier === 2 && o.team !== team && o.lane === lane && o.dead);
+      const inhibDown = G.units.some((o) => o.kind === 'tower' && o.tier === T_INHIB && o.team !== team && o.lane === lane && o.dead);
       const laneTypes: MinionType[] = inhibDown ? ['super', ...types.filter((t) => t !== 'siege')] : types;
       laneTypes.forEach((mt, i) => {
         const p = pointAt(poly, Math.max(0, 300 - i * 50));
@@ -1366,7 +1525,7 @@ function updateMinion(u: Unit, dt: number) {
     let best: Unit | null = null;
     let bs = Infinity;
     for (const e of G.units) {
-      if (e.team === u.team || !targetable(e)) continue;
+      if (e.team === u.team || e.kind === 'monster' || e.kind === 'ward' || !targetable(e)) continue;
       const d = dist(u, e) - e.r;
       if (d > 480) continue;
       const score = d + (e.kind === 'champ' ? 260 : 0);
@@ -1389,7 +1548,7 @@ function updateMinion(u: Unit, dt: number) {
 }
 
 function updateTower(u: Unit, dt: number) {
-  if (u.tier === 2) return; // inhibitors don't shoot
+  if (u.tier === T_INHIB) return; // inhibitors don't shoot
   if (u.aggroT > 0) u.aggroT -= dt;
   const valid = (t: Unit | null): t is Unit => !!t && targetable(t) && t.team !== u.team && dist(u, t) <= u.range + t.r;
   let t: Unit | null = null;
@@ -1398,6 +1557,7 @@ function updateTower(u: Unit, dt: number) {
   else {
     t = nearestEnemy(u, u.range, (e) => e.kind === 'minion') ?? nearestEnemy(u, u.range, (e) => e.kind === 'champ');
   }
+  if (t !== u.target) u.heat = 0;
   u.target = t;
   if (t) tryAttack(u, t);
 }
@@ -1407,7 +1567,14 @@ function updateChamp(u: Unit, dt: number) {
   const c = u.champ!;
   for (let i = 0; i < 4; i++) c.cds[i] = Math.max(0, c.cds[i] - dt);
   for (let i = 0; i < 2; i++) c.spellCds[i] = Math.max(0, c.spellCds[i] - dt);
-  u.mp = Math.min(u.maxMp, u.mp + c.def.mpRegen * (1 + c.level * 0.06) * dt);
+  if (c.azureT > 0) c.azureT = Math.max(0, c.azureT - dt);
+  if (c.emberT > 0) c.emberT = Math.max(0, c.emberT - dt);
+  if (c.wards < 2 && (c.wardCd -= dt) <= 0) {
+    c.wards++;
+    c.wardCd = c.wards < 2 ? 120 : 0;
+  }
+  // Azure blessing: much faster mana regeneration (and ability haste, see cdOf)
+  u.mp = Math.min(u.maxMp, u.mp + (c.def.mpRegen * (1 + c.level * 0.06) + (c.azureT > 0 ? u.maxMp * 0.01 : 0)) * dt);
   if (u.revealT > 0) u.revealT -= dt;
   c.buffs = c.buffs.filter((b) => (b.t -= dt) > 0);
   if (c.recallT > 0) {
@@ -1456,8 +1623,16 @@ function updateChamp(u: Unit, dt: number) {
         }
       }
     } else {
-      u.x += ((d.tx - u.x) / rem) * step;
-      u.y += ((d.ty - u.y) / rem) * step;
+      const nx = u.x + ((d.tx - u.x) / rem) * step;
+      const ny = u.y + ((d.ty - u.y) / rem) * step;
+      // most dashes can't cross jungle walls
+      if (isWall(nx, ny)) {
+        d.tx = u.x;
+        d.ty = u.y;
+      } else {
+        u.x = nx;
+        u.y = ny;
+      }
     }
     return;
   }
@@ -1499,7 +1674,7 @@ function aiShop(u: Unit) {
   }
 }
 
-function laneFront(team: Team, lane: number): Vec {
+function laneFront(team: Side, lane: number): Vec {
   const enemyNexus = NEXUS[1 - team];
   const ownNexus = NEXUS[team];
   let best: Unit | null = null;
@@ -1592,6 +1767,63 @@ function aiUtility(u: Unit, foe: Unit | null) {
   });
 }
 
+// Junglers walk a clear of their own side's camps, smite buffs and epics, and gank lanes when an
+// enemy laner nearby is hurt.
+function aiJungle(u: Unit) {
+  const c = u.champ!;
+  const team = u.team as Team;
+  // gank: a hurt enemy champion within reach of us
+  const prey = G.units.find((e) => e.champ && e.team !== team && isSeen(team, e) && targetable(e) && e.hp / e.maxHp < 0.55 && dist(e, u) < 3000 && !towerCovering(e, e.team, 100));
+  if (prey && c.level >= 3 && u.hp / u.maxHp > 0.6) {
+    c.order = { type: 'attack', target: prey };
+    return;
+  }
+  // fighting a camp already?
+  const fighting = G.units.find((m) => m.kind === 'monster' && !m.dead && m.target === u);
+  let goal: CampState | null = null;
+  if (!fighting) {
+    let best = Infinity;
+    for (const cs of G.camps) {
+      if (!cs.mobs.some((m) => !m.dead)) continue;
+      const d = dist(u, cs.def);
+      const epic = cs.def.epic;
+      // epics need levels and health; enemy camps are only invaded when close
+      if (epic && (c.level < (cs.def.mobs[0].type === 'colossus' ? 11 : 7) || u.hp / u.maxHp < 0.75)) continue;
+      if (cs.def.side !== 2 && cs.def.side !== team && d > 2500) continue;
+      const score = d + (epic ? -1500 : 0) + (cs.def.mobs[0].type === 'skitter' && c.level < 3 ? 4000 : 0);
+      if (score < best) {
+        best = score;
+        goal = cs;
+      }
+    }
+  }
+  const target = fighting ?? goal?.mobs.filter((m) => !m.dead && !m.resetting).sort((a, b) => b.maxHp - a.maxHp)[0];
+  if (target) {
+    // smite to secure buffs and epics, or to speed the clear when low
+    const big = target.monster === 'azure' || target.monster === 'ember' || target.monster === 'drake' || target.monster === 'colossus';
+    if (c.spellCds[1] <= 0 && dist(u, target) < 500 && target.hp <= smiteDamage(u) && (big || u.hp / u.maxHp < 0.45 || c.level < 4)) castSmite(u, target);
+    if (dist(u, target) < 700) for (let s = 0; s < 3; s++) {
+      const a = c.def.abilities[s];
+      if (c.cds[s] <= 0 && c.ranks[s] > 0 && u.mp > a.cost * 2 && a.kind !== 'ally' && !(a.kind === 'buff' && a.stealth)) cast(u, s, target.x, target.y);
+    }
+    c.order = { type: 'attack', target };
+    return;
+  }
+  // nothing up: wait at the camp that respawns soonest on our side, warding the river on the way
+  const next = G.camps.filter((cs) => cs.def.side === team).sort((a, b) => a.next - b.next)[0];
+  if (next) c.order = { type: 'move', x: next.def.x + 150, y: next.def.y + 150 };
+  aiWard(u);
+}
+
+// Drop a trinket ward in the nearest river brush when there's no friendly ward around it.
+function aiWard(u: Unit) {
+  const c = u.champ!;
+  if (c.wards <= 0 || Math.random() > 0.05) return;
+  const spot = BRUSHES.filter((b) => dist(b, u) < 900).sort((a, b) => dist(a, u) - dist(b, u))[0];
+  if (!spot || G.units.some((w) => w.kind === 'ward' && !w.dead && w.team === u.team && dist(w, spot) < 600)) return;
+  placeWard(u, spot.x, spot.y);
+}
+
 function aiChamp(u: Unit, dt: number) {
   const c = u.champ!;
   c.think -= dt;
@@ -1668,6 +1900,23 @@ function aiChamp(u: Unit, dt: number) {
     }
   }
 
+  // --- jungler: clear camps, take objectives, gank hurt laners ---
+  if (c.role === 'jungle') {
+    aiJungle(u);
+    return;
+  }
+
+  // --- support: stay with the bot laner and leave the minions to them ---
+  if (c.role === 'support') {
+    const adc = G.units.find((o) => o.champ?.role === 'adc' && o.team === u.team && !o.dead && dist(o, BASES[u.team]) > 2500);
+    if (adc) {
+      const back = dist(adc, ownNexus) || 1;
+      c.order = { type: 'move', x: adc.x + ((ownNexus.x - adc.x) / back) * 180 + 90, y: adc.y + ((ownNexus.y - adc.y) / back) * 180 - 90 };
+      aiWard(u);
+      return;
+    }
+  }
+
   // --- farm ---
   const mins = G.units.filter(
     (m) => m.kind === 'minion' && !m.dead && m.team !== u.team && dist(m, u) < 650,
@@ -1733,14 +1982,14 @@ function updateZones(dt: number) {
   G.zones = G.zones.filter((z) => z.t > 0);
 }
 
-const hiddenFrom = (u: Unit, viewer: Unit) => u.stealthT > 0 && u.team !== viewer.team;
+const hiddenFrom = (u: Unit, viewer: Unit) => u.team !== viewer.team && (u.stealthT > 0 || !isSeen(viewer.team, u));
 interface ZoneView {
   x: number;
   y: number;
   r: number;
   color: string;
   k: number; // time left, 1 -> 0
-  team: Team;
+  team: Side;
   once: boolean;
 }
 let guestZones: ZoneView[] = [];
@@ -1748,6 +1997,266 @@ const zoneViews = (): ZoneView[] =>
   net.role === 'guest'
     ? guestZones
     : G.zones.map((z) => ({ x: z.x, y: z.y, r: z.r, color: z.a.color, k: z.t / z.dur, team: z.team, once: !!z.a.once }));
+
+// ================= jungle =================
+interface CampState {
+  def: CampDef;
+  next: number; // game time of the next spawn (when empty)
+  mobs: Unit[];
+  announced: boolean;
+}
+interface MonsterStat {
+  name: string;
+  hp: number;
+  ad: number;
+  range: number;
+  as: number;
+  r: number;
+  armor: number;
+  mr: number;
+  ms: number;
+  gold: number;
+  xp: number;
+}
+const MONSTERS: Record<MonsterType, MonsterStat> = {
+  azure: { name: 'Azure Golem', hp: 2300, ad: 66, range: 160, as: 0.5, r: 62, armor: 10, mr: -15, ms: 300, gold: 100, xp: 150 },
+  ember: { name: 'Ember Brute', hp: 2300, ad: 66, range: 160, as: 0.5, r: 62, armor: -15, mr: 10, ms: 300, gold: 100, xp: 150 },
+  toad: { name: 'Bog Toad', hp: 2050, ad: 70, range: 250, as: 0.43, r: 56, armor: 0, mr: -15, ms: 300, gold: 80, xp: 125 },
+  birdBig: { name: 'Razorbeak Alpha', hp: 1200, ad: 20, range: 300, as: 0.67, r: 34, armor: 20, mr: 20, ms: 350, gold: 60, xp: 50 },
+  bird: { name: 'Razorbeak', hp: 400, ad: 13, range: 300, as: 1, r: 22, armor: 0, mr: 0, ms: 350, gold: 10, xp: 15 },
+  boarBig: { name: 'Thornback Matriarch', hp: 1600, ad: 35, range: 160, as: 0.63, r: 40, armor: 0, mr: 0, ms: 380, gold: 55, xp: 60 },
+  boar: { name: 'Thornback', hp: 420, ad: 15, range: 140, as: 0.67, r: 26, armor: 0, mr: 0, ms: 380, gold: 16, xp: 20 },
+  hulkBig: { name: 'Stonehulk', hp: 1350, ad: 70, range: 160, as: 0.5, r: 50, armor: 40, mr: -15, ms: 250, gold: 70, xp: 75 },
+  hulk: { name: 'Pebblehulk', hp: 1000, ad: 40, range: 140, as: 0.6, r: 36, armor: 20, mr: 0, ms: 280, gold: 40, xp: 45 },
+  skitter: { name: 'River Skitter', hp: 1050, ad: 0, range: 0, as: 0.1, r: 34, armor: 40, mr: 40, ms: 260, gold: 70, xp: 110 },
+  drake: { name: 'Storm Drake', hp: 3800, ad: 100, range: 500, as: 0.5, r: 90, armor: 21, mr: 30, ms: 330, gold: 0, xp: 0 },
+  colossus: { name: 'Abyssal Colossus', hp: 9000, ad: 150, range: 250, as: 0.75, r: 110, armor: 120, mr: 70, ms: 350, gold: 0, xp: 0 },
+};
+const colossusOn = (team: Side) => team < 2 && !!G && G.colossus[team as Team] > G.t;
+const smiteDamage = (u: Unit) => 450 + 25 * u.champ!.level;
+
+function updateCamps() {
+  for (const cs of G.camps) {
+    cs.mobs = cs.mobs.filter((m) => !m.dead && G.units.includes(m));
+    if (cs.mobs.length || G.t < cs.next) continue;
+    if (cs.def.epic && !cs.announced && G.t >= cs.next) {
+      cs.announced = true;
+      feedMsg(`${cs.def.name} has spawned`, -1);
+      announce(`${cs.def.name} has spawned`, 'neutral');
+    }
+    // monsters scale with the average champion level, like the lane minions scale with time
+    const champs = G.units.filter((c) => c.champ);
+    const avgLvl = champs.reduce((a, c) => a + c.champ!.level, 0) / Math.max(1, champs.length);
+    const s = 1 + (avgLvl - 1) * 0.1;
+    for (const mb of cs.def.mobs) {
+      const st = MONSTERS[mb.type];
+      const m = makeUnit({
+        kind: 'monster',
+        team: 2,
+        x: cs.def.x + mb.dx,
+        y: cs.def.y + mb.dy,
+        r: st.r,
+        hp: st.hp * s,
+        maxHp: st.hp * s,
+        ad: st.ad * s,
+        range: st.range,
+        as: st.as,
+        armor: st.armor,
+        mr: st.mr,
+        ms: st.ms,
+        name: st.name,
+        fadeIn: 0.5,
+      });
+      m.monster = mb.type;
+      m.camp = cs.def.id;
+      m.home = { x: m.x, y: m.y };
+      m.face = Math.random() * 6;
+      cs.mobs.push(m);
+      G.units.push(m);
+    }
+    cs.next = Infinity; // set when the camp is cleared
+  }
+}
+
+// The whole camp turns on whoever hits one of its monsters.
+function monsterAggro(t: Unit, src: Unit) {
+  const cs = G.camps.find((c) => c.def.id === t.camp);
+  for (const m of cs ? cs.mobs : [t]) {
+    if (m.dead || m.resetting) continue;
+    if (!m.target || m.target.dead || m.target === src) {
+      m.target = src;
+      m.leashT = 0;
+    }
+  }
+}
+
+function updateMonster(u: Unit, dt: number) {
+  const home = u.home!;
+  if (u.resetting) {
+    u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.5 * dt);
+    if (moveToward(u, home.x, home.y, dt, 2)) {
+      u.resetting = false;
+      u.hp = u.maxHp;
+      u.face = Math.random() * 6;
+    }
+    return;
+  }
+  if (u.stunT > 0 || u.push) return;
+  const t = u.target;
+  if (!t) {
+    if (u.monster === 'skitter') {
+      // skitters wander the river between the pits
+      if (dist(u, home) < 20 || Math.random() < 0.004) u.pathGoal = { x: home.x + (Math.random() - 0.5) * 900, y: home.y + (Math.random() - 0.5) * 900 };
+    }
+    return;
+  }
+  u.leashT += dt;
+  // leash: too far from home, target gone, or not hit for a while -> walk home and heal
+  if (!targetable(t) || dist(u, home) > 1000 || dist(t, home) > 1300 || u.leashT > 7 || (t.champ && t.champ.recallT > 0 && dist(t, u) > 600)) {
+    u.target = null;
+    u.resetting = true;
+    return;
+  }
+  if (u.monster === 'skitter') {
+    // skitters don't fight back; they scuttle away from the attacker
+    const d = dist(u, t) || 1;
+    moveToward(u, u.x + ((u.x - t.x) / d) * 200, u.y + ((u.y - t.y) / d) * 200, dt, 0.5);
+    return;
+  }
+  if (inRange(u, t)) tryAttack(u, t);
+  else moveToward(u, t.x, t.y, dt);
+}
+
+function monsterKilled(t: Unit, killer: Unit | null) {
+  const st = MONSTERS[t.monster!];
+  const cs = G.camps.find((c) => c.def.id === t.camp);
+  if (cs) {
+    cs.mobs = cs.mobs.filter((m) => m !== t && !m.dead);
+    if (!cs.mobs.length) {
+      cs.next = G.t + cs.def.respawn;
+      cs.announced = false;
+    }
+  }
+  if (!killer?.champ) return;
+  const team = killer.team as Team;
+  if (killer.champ.spell2 === 'smite') heal(killer, 30 + killer.maxHp * 0.06); // companion sustain
+  giveGold(killer, st.gold);
+  gainXp(killer, st.xp);
+  killer.champ.cs += t.monster === 'bird' || t.monster === 'boar' ? 1 : 4;
+  const mine = team === G.player.team;
+  if (t.monster === 'azure') {
+    killer.champ.azureT = 120;
+    feedMsg(`${killer.name} took the Azure Golem's blessing`, team);
+  } else if (t.monster === 'ember') {
+    killer.champ.emberT = 120;
+    feedMsg(`${killer.name} took the Ember Brute's blessing`, team);
+  } else if (t.monster === 'drake') {
+    G.drakes[team]++;
+    for (const c of G.units) if (c.champ && c.team === team) giveGold(c, 100), gainXp(c, 200);
+    announce(mine ? 'Your team has slain the Storm Drake' : 'The enemy has slain the Storm Drake', mine ? 'good' : 'bad', `+5% damage (${G.drakes[team]} stack${G.drakes[team] > 1 ? 's' : ''})`);
+  } else if (t.monster === 'colossus') {
+    G.colossus[team] = G.t + 180;
+    for (const c of G.units) if (c.champ && c.team === team) giveGold(c, 300), gainXp(c, 400);
+    announce(mine ? 'Your team has slain the Abyssal Colossus' : 'The enemy has slain the Abyssal Colossus', mine ? 'good' : 'bad', 'Empowered minions and fast recall for 3 minutes');
+  }
+}
+
+// Smite: big true-damage hit on a monster or minion; the jungler's summoner spell.
+function castSmite(u: Unit, target?: Unit | null): boolean {
+  const c = u.champ!;
+  if (u.dead || c.spellCds[1] > 0 || c.spell2 !== 'smite') return false;
+  const ok = (e: Unit | null | undefined): e is Unit => !!e && targetable(e) && (e.kind === 'monster' || (e.kind === 'minion' && e.team !== u.team)) && dist(u, e) <= 500 + e.r;
+  let t = ok(target) ? target : null;
+  if (!t) {
+    let best = Infinity;
+    for (const e of G.units)
+      if (ok(e)) {
+        const score = (e.kind === 'monster' ? 0 : 1000) + dist(u, e) - e.r * 4;
+        if (score < best) {
+          best = score;
+          t = e;
+        }
+      }
+  }
+  if (!t) return false;
+  c.spellCds[1] = 75;
+  const dmg = smiteDamage(u);
+  t.hp -= dmg; // true damage, ignores shields and resistances
+  t.hitFlash = 0.2;
+  heal(u, 60 + 5 * c.level);
+  if (t.kind === 'monster') monsterAggro(t, u);
+  addText(t.x, t.y, String(Math.round(dmg)), '#ffcf6a', 20);
+  if (onScreen(t)) {
+    beams.push({ sx: t.x, sy: t.y - 600, ex: t.x, ey: t.y, w: 60, t: 0.35, color: '#ffcf6a' });
+    ring(t.x, t.y, t.r + 50, '#ffcf6a', 0.4, 9);
+    burst(t.x, t.y, 20, { kind: 'ember', color: '#ffcf6a', speed: 340, life: 0.45, size: 5, drag: 4 });
+  }
+  sfx('boom', t, u === G.player ? 1 : 0.6);
+  if (t.hp <= 0) kill(t, u);
+  return true;
+}
+
+// Turret plating: before 14:00 outer turrets shed a plate (and 125 gold) every 800 health.
+function checkPlates(t: Unit) {
+  if (G.t >= 840) return;
+  while (t.plates > 0 && t.hp <= t.maxHp - (6 - t.plates) * 800) {
+    t.plates--;
+    const near = G.units.filter((c) => c.champ && !c.dead && c.team !== t.team && dist(c, t) < 1200);
+    for (const c of near) giveGold(c, Math.round(125 / near.length));
+    if (onScreen(t)) burst(t.x, t.y, 14, { kind: 'smoke', color: '#9a8f80', speed: 220, life: 0.6, size: 10, grow: 20 });
+  }
+}
+
+// ---------- vision: champions, minions, turrets and wards light up the fog for their team ----------
+const SIGHT = { champ: 1250, minion: 1100, tower: 1350, nexus: 1350, ward: 900, monster: 0 } as const;
+function computeVision() {
+  for (const team of [0, 1] as Team[]) {
+    const eyes = G.units.filter((o) => !o.dead && o.team === team && o.kind !== 'monster' && !(o.kind === 'tower' && o.tier === T_INHIB));
+    const seen = new Set<Unit>();
+    for (const e of G.units) {
+      if (e.dead || e.team === team) continue;
+      if (e.kind === 'tower' || e.kind === 'nexus') {
+        seen.add(e); // structures are always on the map
+        continue;
+      }
+      const eb = e.revealT > 0 ? -1 : brushOf(e.x, e.y);
+      for (const o of eyes) {
+        const r = SIGHT[o.kind] + e.r;
+        if (Math.abs(o.x - e.x) > r || Math.abs(o.y - e.y) > r || dist(o, e) > r) continue;
+        // brush hides you from anyone not standing in it (turrets see in)
+        if (eb >= 0 && o.kind !== 'tower' && brushOf(o.x, o.y) !== eb && dist(o, e) > 160) continue;
+        if (!lineClear(o, e, 80)) continue;
+        seen.add(e);
+        break;
+      }
+    }
+    G.seen[team] = seen;
+  }
+}
+const isSeen = (team: Side, e: Unit) => team === 2 || e.team === team || !G.seen[team as Team] || G.seen[team as Team].has(e);
+const fogged = (e: Unit) => !isSeen(G.player.team, e);
+
+// ---------- trinket ward ----------
+function placeWard(u: Unit, x: number, y: number): boolean {
+  const c = u.champ!;
+  if (u.dead || c.wards <= 0) return false;
+  const d = Math.hypot(x - u.x, y - u.y) || 1;
+  const reach = Math.min(d, 600);
+  const p = { x: u.x + ((x - u.x) / d) * reach, y: u.y + ((y - u.y) / d) * reach };
+  pushOut(p);
+  // one ward per champion: the oldest goes
+  const mine = G.units.filter((w) => w.kind === 'ward' && w.target === u && !w.dead);
+  if (mine.length >= 2) mine[0].dead = true;
+  const w = makeUnit({ kind: 'ward', team: u.team, x: p.x, y: p.y, r: 14, hp: 3, maxHp: 3, name: 'Ward', fadeIn: 0.3 });
+  w.life = 90;
+  w.stealthT = 1;
+  w.target = u; // owner
+  G.units.push(w);
+  c.wards--;
+  if (c.wardCd <= 0) c.wardCd = 120;
+  if (u === G.player) sfx('click');
+  return true;
+}
 
 // ================= main update =================
 function update(dt: number) {
@@ -1760,6 +2269,16 @@ function update(dt: number) {
   if (G.t >= G.nextWave) {
     spawnWave();
     G.nextWave += WAVE_INTERVAL;
+  }
+  updateCamps();
+  if ((G.visionT -= dt) <= 0) {
+    G.visionT = 0.2;
+    computeVision();
+  }
+  if (!G.platesGone && G.t >= 840) {
+    G.platesGone = true;
+    for (const t of G.units) t.plates = 0;
+    feedMsg('Turret plating has fallen', -1);
   }
 
   for (const u of G.units) {
@@ -1788,7 +2307,7 @@ function update(dt: number) {
       }
     }
     if (u.dead) {
-      if (u.kind === 'tower' && u.tier === 2 && (u.reviveT -= dt) <= 0) {
+      if (u.kind === 'tower' && u.tier === T_INHIB && (u.reviveT -= dt) <= 0) {
         u.dead = false;
         u.hp = u.maxHp;
         u.hpTrail = 1;
@@ -1812,8 +2331,13 @@ function update(dt: number) {
         u.y = pu.ty;
         u.push = null;
       } else {
-        u.x += ((pu.tx - u.x) / rem) * step;
-        u.y += ((pu.ty - u.y) / rem) * step;
+        const nx = u.x + ((pu.tx - u.x) / rem) * step;
+        const ny = u.y + ((pu.ty - u.y) / rem) * step;
+        if (isWall(nx, ny)) u.push = null;
+        else {
+          u.x = nx;
+          u.y = ny;
+        }
       }
     }
     if (u.hitFlash > 0) u.hitFlash -= dt;
@@ -1824,6 +2348,13 @@ function update(dt: number) {
     u.hpTrail = frac > u.hpTrail ? frac : Math.max(frac, u.hpTrail - dt * 0.55);
     if (u.kind === 'champ') updateChamp(u, dt);
     else if (u.kind === 'minion') updateMinion(u, dt);
+    else if (u.kind === 'monster') updateMonster(u, dt);
+    else if (u.kind === 'ward') {
+      u.stealthT = 1; // wards stay hidden from the enemy
+      if ((u.life -= dt) <= 0) u.dead = true;
+    }
+    if (u.pathT > 0) u.pathT -= dt;
+    if (u.kind === 'champ' || u.kind === 'minion' || u.kind === 'monster') pushOut(u);
     else if (u.kind === 'tower') updateTower(u, dt);
   }
 
@@ -1853,7 +2384,7 @@ function update(dt: number) {
     p.traveled += step;
     for (const e of G.units) {
       if (e.team === p.team || p.hit.has(e) || !targetable(e)) continue;
-      if (e.kind !== 'champ' && (p.champOnly || e.kind !== 'minion')) continue;
+      if (e.kind !== 'champ' && (p.champOnly || (e.kind !== 'minion' && e.kind !== 'monster'))) continue;
       if (dist(p, e) > p.width / 2 + e.r) continue;
       p.hit.add(e);
       if (p.a) hitEnemy(p.owner, e, p.a, p.dmg, p);
@@ -1928,7 +2459,7 @@ function update(dt: number) {
     }
   }
 
-  G.units = G.units.filter((u) => !(u.kind === 'minion' && u.dead));
+  G.units = G.units.filter((u) => !((u.kind === 'minion' || u.kind === 'monster' || u.kind === 'ward') && u.dead));
   G.fx = G.fx.filter((f) => (f.t += dt) < f.max);
   G.texts = G.texts.filter((t) => (t.t -= dt * 0.9) > 0);
   for (const b of beams) b.t -= dt;
@@ -2046,7 +2577,8 @@ function render() {
 
   const hovered = demoMode ? null : hoverUnit();
   canvas.classList.toggle('hostile', !!hovered);
-  syncUnits(G.units, { dt: animDt, time: now, hovered, winner: G.over, view, viewTeam: P.team });
+  for (const u of G.units) (u as Unit & { fogged?: boolean }).fogged = u.team !== P.team && fogged(u);
+  syncUnits(G.units, { dt: animDt, time: now, hovered, winner: G.over, view, viewTeam: P.team as Team });
   animDt = 0;
 
   // ---- ground decals: telegraphs, rings and smoke sit under the units ----
@@ -2088,7 +2620,7 @@ function render() {
   }
   if (!demoMode) {
     for (const t of G.units) {
-      if (t.kind !== 'tower' || t.tier === 2 || t.dead || t.team === P.team) continue;
+      if (t.kind !== 'tower' || t.tier === T_INHIB || t.dead || t.team === P.team) continue;
       if (dist(t, P) < t.range + 300) {
         const aimed = t.target === P;
         d.strokeStyle = aimed ? `rgba(255,60,60,${0.7 + 0.25 * Math.sin(now * 10)})` : 'rgba(255,90,90,0.4)';
@@ -2162,13 +2694,14 @@ function render() {
   // ---- overlay ----
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  if (!demoMode) drawFog(z);
 
   // structure crystals and tower lasers
   ctx.globalCompositeOperation = 'lighter';
   for (const u of G.units) {
     if ((u.kind !== 'tower' && u.kind !== 'nexus') || u.dead || !visible(u)) continue;
     const col = TEAM_COLOR[u.team];
-    const inhib = u.kind === 'tower' && u.tier === 2;
+    const inhib = u.kind === 'tower' && u.tier === T_INHIB;
     const s = screenOf(u.x, u.y, inhib ? 120 : u.kind === 'tower' ? 282 : 170);
     if (inhib) drawGlow(ctx, s.x, s.y, 90 * z, col, 0.4 + 0.1 * Math.sin(now * 2 + u.id));
     else if (u.kind === 'tower') {
@@ -2237,7 +2770,21 @@ function render() {
   ctx.textBaseline = 'middle';
   const ui = TOUCH ? 0.9 : 1;
   for (const u of G.units) {
-    if (u.dead || !visible(u) || u.kind === 'champ') continue;
+    if (u.dead || !visible(u) || u.kind === 'champ' || u.kind === 'ward' || hiddenFrom(u, P)) continue;
+    if (u.kind === 'monster') {
+      const big = (u.monster === 'drake' || u.monster === 'colossus');
+      const s = screenOf(u.x, u.y, unitHeight(u) + 24);
+      hpBar(s.x, s.y, (big ? 150 : u.r > 45 ? 90 : 56) * ui, big ? 9 : 5, u.hp / u.maxHp, u.hpTrail, '#c8a050');
+      if (big || u.r > 45) {
+        ctx.font = '600 11px Geist, sans-serif';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.strokeText(u.name, s.x, s.y - 10);
+        ctx.fillStyle = '#f0e2b8';
+        ctx.fillText(u.name, s.x, s.y - 10);
+      }
+      continue;
+    }
     if (u.kind === 'minion') {
       const s = screenOf(u.x, u.y, unitHeight(u) + 16);
       hpBar(s.x, s.y, 46 * ui, 4, u.hp / u.maxHp, u.hpTrail, u.team === P.team ? '#4a9cff' : '#e8473c');
@@ -2322,16 +2869,88 @@ function render() {
 const vignetteEl = $('vignette');
 let vignetteOpacity = 0;
 
+const fogCanvases = new Map<string, HTMLCanvasElement>();
+function fogCanvas(w: number, h: number) {
+  const key = `${w}x${h}`;
+  let c = fogCanvases.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    fogCanvases.set(key, c);
+  }
+  return c;
+}
+// Darkens what your team can't see. Drawn at quarter resolution with soft edges; ground maps to
+// the screen affinely, so each sight circle is an ellipse squashed by K.
+function drawFog(z: number) {
+  const q = 4;
+  const fw = Math.ceil(W / q);
+  const fh = Math.ceil(H / q);
+  const fc = fogCanvas(fw, fh);
+  const f = fc.getContext('2d')!;
+  f.globalCompositeOperation = 'source-over';
+  f.clearRect(0, 0, fw, fh);
+  f.fillStyle = 'rgba(2,8,18,0.55)';
+  f.fillRect(0, 0, fw, fh);
+  f.globalCompositeOperation = 'destination-out';
+  const halfW = W / 2 / z;
+  for (const o of G.units) {
+    if (o.dead || o.team !== G.player.team || o.kind === 'monster' || (o.kind === 'tower' && o.tier === T_INHIB)) continue;
+    const r = SIGHT[o.kind];
+    if (Math.abs(o.x - rcx) > halfW + r || Math.abs(o.y - rcy) > H / (z * K) + r) continue;
+    const sp = screenOf(o.x, o.y, 0);
+    const rx = (r * z) / q;
+    const g = f.createRadialGradient(0, 0, rx * 0.8, 0, 0, rx);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    f.save();
+    f.translate(sp.x / q, sp.y / q);
+    f.scale(1, K);
+    f.fillStyle = g;
+    f.beginPath();
+    f.arc(0, 0, rx, 0, Math.PI * 2);
+    f.fill();
+    f.restore();
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fc, 0, 0, fw * q, fh * q);
+}
 function drawMinimap() {
   const s = 220 / MAP;
   mctx.setTransform(1, 0, 0, 1, 0, 0);
   mctx.drawImage(minimapCanvas, 0, 0, 220, 220);
+  // fog of war: everything outside your team's sight is dimmed
+  const fc = fogCanvas(220, 220);
+  const f = fc.getContext('2d')!;
+  f.globalCompositeOperation = 'source-over';
+  f.clearRect(0, 0, 220, 220);
+  f.fillStyle = 'rgba(0,6,14,0.5)';
+  f.fillRect(0, 0, 220, 220);
+  f.globalCompositeOperation = 'destination-out';
+  f.fillStyle = '#000';
+  for (const o of G.units) {
+    if (o.dead || o.team !== G.player.team || o.kind === 'monster' || (o.kind === 'tower' && o.tier === T_INHIB)) continue;
+    f.beginPath();
+    f.arc(o.x * s, o.y * s, SIGHT[o.kind] * s, 0, Math.PI * 2);
+    f.fill();
+  }
+  mctx.drawImage(fc, 0, 0);
   for (const u of G.units) {
     if (u.dead || hiddenFrom(u, G.player)) continue;
     const x = u.x * s;
     const y = u.y * s;
     mctx.fillStyle = TEAM_COLOR[u.team];
-    if (u.kind === 'tower') mctx.fillRect(x - 4, y - 4, 8, 8);
+    if (u.kind === 'ward') {
+      mctx.fillStyle = '#ffe27a';
+      mctx.fillRect(x - 2, y - 2, 4, 4);
+    } else if (u.kind === 'monster') {
+      const big = u.r > 45;
+      mctx.fillStyle = u.monster === 'drake' || u.monster === 'colossus' ? '#d58cff' : '#e8c46a';
+      mctx.beginPath();
+      mctx.arc(x, y, big ? 4 : 2.2, 0, Math.PI * 2);
+      mctx.fill();
+    } else if (u.kind === 'tower') mctx.fillRect(x - 4, y - 4, 8, 8);
     else if (u.kind === 'nexus') mctx.fillRect(x - 6, y - 6, 12, 12);
     else if (u.kind === 'minion') mctx.fillRect(x - 1, y - 1, 2.5, 2.5);
     else {
@@ -2355,7 +2974,7 @@ function hoverUnit(pad = 14): Unit | null {
   let best: Unit | null = null;
   let bd = Infinity;
   for (const u of G.units) {
-    if (u.team === G.player.team || !targetable(u)) continue;
+    if (u.team === G.player.team || !targetable(u) || fogged(u)) continue;
     const h = unitHeight(u);
     const foot = screenOf(u.x, u.y, 0);
     const head = screenOf(u.x, u.y, h * 0.85);
@@ -2388,7 +3007,9 @@ function buildHud() {
   const defs = [
     ...c.def.abilities.map((a) => ({ name: a.name, desc: a.desc, color: a.color, cd: a.cd })),
     { name: 'Flash', desc: 'Blink a short distance.', color: '#fff6a8', cd: 180 },
-    { name: 'Heal', desc: 'Restore health and gain a burst of speed.', color: '#7dff9c', cd: 150 },
+    c.spell2 === 'smite'
+      ? { name: 'Smite', desc: 'Deal heavy true damage to a monster or minion (hover it, or the nearest is chosen). Secures buffs and epic monsters.', color: '#ffcf6a', cd: 75 }
+      : { name: 'Heal', desc: 'Restore health and gain a burst of speed.', color: '#7dff9c', cd: 150 },
   ];
   defs.forEach((d, i) => {
     const el = document.createElement('div');
@@ -2499,7 +3120,7 @@ function updateHud() {
   updateTouchHud();
 }
 
-function feedMsg(text: string, team: Team | -1) {
+function feedMsg(text: string, team: Side | -1) {
   if (relaying()) evq.push(['f', text, team]);
   const el = document.createElement('div');
   el.textContent = text;
@@ -2610,7 +3231,7 @@ canvas.addEventListener(
   (e) => {
     if (!running) return;
     e.preventDefault();
-    G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.5, 1.5);
+    G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.4, 1.3);
   },
   { passive: false },
 );
@@ -2665,7 +3286,8 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (k === 'd') command({ c: 'flash', x: w.x, y: w.y });
-  else if (k === 'f') command({ c: 'heal' });
+  else if (k === 'f') command({ c: 'heal', id: hoverUnit(30)?.id });
+  else if (k === '4') command({ c: 'ward', x: w.x, y: w.y });
   else if (k === 'b') command({ c: 'recall' });
   else if (k === 's') command({ c: 'stop' });
 });
@@ -2888,7 +3510,9 @@ function buildTouch() {
     { id: 'e', label: ab[2].name, angle: 100, r: 122, size: 62, color: ab[2].color },
     { id: 'r', label: ab[3].name, angle: 148, r: 205, size: 68, color: ab[3].color },
     { id: 'd', label: 'Flash', angle: 102, r: 205, size: 48, color: '#fff6a8' },
-    { id: 'f', label: 'Heal', angle: 72, r: 200, size: 48, color: '#7dff9c' },
+    G.player.champ!.spell2 === 'smite'
+      ? { id: 'f', label: 'Smite', angle: 72, r: 200, size: 48, color: '#ffcf6a' }
+      : { id: 'f', label: 'Heal', angle: 72, r: 200, size: 48, color: '#7dff9c' },
     { id: 'minion', label: 'Minion', angle: 222, r: 100, size: 42, color: '#8fa3b8' },
     { id: 'tower', label: 'Turret', angle: 50, r: 98, size: 42, color: '#b88f8f' },
   ];
@@ -2991,31 +3615,24 @@ function updateTouchHud() {
   $('mmpfill').style.transform = `scaleX(${clamp(P.mp / (P.maxMp || 1), 0, 1)})`;
 }
 
-// floating joystick
+// floating joystick. iOS Safari is driven by Touch Events (tracked by identifier on the document,
+// so lifting a thumb anywhere ends the stick); other browsers use Pointer Events.
 const joyzone = $('joyzone');
-joyzone.addEventListener('pointerdown', (e) => {
-  if (!running || joy.id >= 0) return;
-  e.preventDefault();
-  try {
-      joyzone.setPointerCapture(e.pointerId);
-    } catch {
-      // pointer already released
-    }
-  joy.id = e.pointerId;
-  joy.bx = e.clientX;
-  joy.by = e.clientY;
+function joyStart(id: number, x: number, y: number) {
+  joy.id = id;
+  joy.bx = x;
+  joy.by = y;
   joy.dx = joy.dy = 0;
   const base = $('joybase');
-  base.style.left = `${e.clientX}px`;
-  base.style.top = `${e.clientY}px`;
+  base.style.left = `${x}px`;
+  base.style.top = `${y}px`;
   base.classList.add('on');
   $('joyknob').style.transform = 'translate(-50%, -50%)';
-});
-joyzone.addEventListener('pointermove', (e) => {
-  if (e.pointerId !== joy.id) return;
+}
+function joyMove(x: number, y: number) {
   const max = 60 * touchScale;
-  let dx = e.clientX - joy.bx;
-  let dy = e.clientY - joy.by;
+  let dx = x - joy.bx;
+  let dy = y - joy.by;
   const d = Math.hypot(dx, dy);
   if (d > max) {
     dx = (dx / d) * max;
@@ -3024,17 +3641,72 @@ joyzone.addEventListener('pointermove', (e) => {
   joy.dx = dx;
   joy.dy = dy;
   $('joyknob').style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-});
-const joyEnd = (e: PointerEvent) => {
-  if (e.pointerId !== joy.id) return;
+}
+function joyStop() {
   joy.id = -1;
   joy.dx = joy.dy = 0;
   $('joybase').classList.remove('on');
-};
-joyzone.addEventListener('pointerup', joyEnd);
-joyzone.addEventListener('pointercancel', joyEnd);
+}
+if ('ontouchstart' in window) {
+  const TOUCH_ID = 100000; // keeps touch identifiers apart from pointer ids
+  joyzone.addEventListener(
+    'touchstart',
+    (e) => {
+      e.preventDefault();
+      if (!running) return;
+      // a stick whose finger is gone (missed touchend) gets reset instead of locking up
+      if (joy.id >= 0 && ![...e.touches].some((t) => t.identifier + TOUCH_ID === joy.id)) joyStop();
+      if (joy.id >= 0) return;
+      const t = e.changedTouches[0];
+      joyStart(t.identifier + TOUCH_ID, t.clientX, t.clientY);
+    },
+    { passive: false },
+  );
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      if (joy.id < 0) return;
+      for (const t of e.changedTouches)
+        if (t.identifier + TOUCH_ID === joy.id) {
+          e.preventDefault();
+          joyMove(t.clientX, t.clientY);
+        }
+    },
+    { passive: false },
+  );
+  const end = (e: TouchEvent) => {
+    if (joy.id < 0) return;
+    for (const t of e.changedTouches) if (t.identifier + TOUCH_ID === joy.id) joyStop();
+  };
+  document.addEventListener('touchend', end);
+  document.addEventListener('touchcancel', end);
+} else {
+  joyzone.addEventListener('pointerdown', (e) => {
+    if (!running || joy.id >= 0) return;
+    e.preventDefault();
+    try {
+      joyzone.setPointerCapture(e.pointerId);
+    } catch {
+      // pointer already released
+    }
+    joyStart(e.pointerId, e.clientX, e.clientY);
+  });
+  joyzone.addEventListener('pointermove', (e) => {
+    if (e.pointerId === joy.id) joyMove(e.clientX, e.clientY);
+  });
+  const joyEnd = (e: PointerEvent) => {
+    if (e.pointerId === joy.id) joyStop();
+  };
+  joyzone.addEventListener('pointerup', joyEnd);
+  joyzone.addEventListener('pointercancel', joyEnd);
+}
 $('mshop').addEventListener('click', () => toggleShop());
 $('mrecall').addEventListener('click', () => running && command({ c: 'recall' }));
+$('mward').addEventListener('click', () => {
+  if (!running) return;
+  const P = G.player;
+  command({ c: 'ward', x: P.x + facing.x * 400, y: P.y + facing.y * 400 });
+});
 window.addEventListener('resize', () => TOUCH && G && layoutTouch());
 
 // ================= multiplayer: commands, snapshots, lobby =================
@@ -3082,7 +3754,11 @@ function applyCmd(u: Unit, cmd: Cmd) {
       castFlash(u, cmd.x, cmd.y);
       break;
     case 'heal':
-      castHeal(u);
+      if (c.spell2 === 'smite') castSmite(u, cmd.id ? G.units.find((o) => o.id === cmd.id) : null);
+      else castHeal(u);
+      break;
+    case 'ward':
+      placeWard(u, cmd.x, cmd.y);
       break;
     case 'recall':
       startRecall(u);
@@ -3101,8 +3777,8 @@ function applyCmd(u: Unit, cmd: Cmd) {
 }
 
 // ---- host -> guest snapshots ----
-const KINDS: Kind[] = ['champ', 'minion', 'tower', 'nexus'];
-type URow = [number, number, Team, number, number, number, number, number, number, number, string, number, number, number, number, string, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+const KINDS: Kind[] = ['champ', 'minion', 'tower', 'nexus', 'monster', 'ward'];
+type URow = [number, number, Side, number, number, number, number, number, number, number, string, number, number, number, number, string, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
 type CRow = [number, string, number, number, number, string[], number[], number[], number, number, number, number, number, number[], number, number, number, string, number, number, number, number, number, number, number, number];
 type PRow = [number, number, string, number, number, number, number, number, number];
 interface Snap {
@@ -3116,7 +3792,7 @@ interface Snap {
   pd: [Tele, number, number][];
   bm: [number, number, number, number, number, number, string][];
   ev: Ev[];
-  z: [number, number, number, string, number, Team, number][];
+  z: [number, number, number, string, number, Side, number][];
 }
 function encodeSnap(): Snap {
   const ev = evq;
@@ -3128,7 +3804,7 @@ function encodeSnap(): Snap {
     op: [...G.open].map((u) => u.id),
     u: G.units.map((u) => [
       u.id, KINDS.indexOf(u.kind), u.team, r1(u.x), r1(u.y), Math.round(u.hp), Math.round(u.maxHp), u.dead ? 1 : 0, r2(u.face), u.actN, u.act,
-      r2(u.lunge), r2(u.hitFlash), r2(u.stunT), r2(u.slowT), u.mtype ?? '', u.tier, u.lane, u.r, Math.round(u.mp), Math.round(u.maxMp),
+      r2(u.lunge), r2(u.hitFlash), r2(u.stunT), r2(u.slowT), u.monster ?? u.mtype ?? '', u.tier, u.lane, u.r, Math.round(u.mp), Math.round(u.maxMp),
       u.target && !u.target.dead ? u.target.id : 0, r2(u.pop), r2(u.fadeIn), r2(u.lx), r2(u.ly),
       Math.round(u.shield), r2(u.stealthT), r2(u.rootT), r2(u.airT),
     ]),
@@ -3138,7 +3814,7 @@ function encodeSnap(): Snap {
         const c = u.champ!;
         return [
           u.id, c.def.id, c.level, Math.round(c.xp), Math.floor(c.gold), c.items, c.cds.map(r1), c.spellCds.map(r1), r1(c.respawnT),
-          c.kills, c.deaths, c.assists, c.cs, c.ranks, r2(c.recallT), c.buffs.length, c.dash ? 1 : 0, u.name, c.lane,
+          c.kills, c.deaths, c.assists, c.cs, c.ranks, r2(c.recallT), c.buffs.length, c.dash ? 1 : 0, u.name, ROLES.indexOf(c.role),
           Math.round(u.ad), Math.round(u.ap), Math.round(u.armor), Math.round(u.mr), r2(effAS(u)), Math.round(effMS(u) || u.ms), c.haste,
         ];
       }),
@@ -3220,7 +3896,8 @@ function applySnap(s: Snap) {
     u.hitFlash = r[12];
     u.stunT = r[13];
     u.slowT = r[14];
-    u.mtype = (r[15] || null) as MinionType | null;
+    if (u.kind === 'monster') u.monster = r[15] as MonsterType;
+    else u.mtype = (r[15] || null) as MinionType | null;
     u.tier = r[16];
     u.lane = r[17];
     u.r = r[18];
@@ -3255,7 +3932,7 @@ function applySnap(s: Snap) {
     if (!u) continue;
     if (!u.champ) {
       const def = CHAMPS.find((d) => d.id === r[1]) ?? CHAMPS[0];
-      u.champ = makeChamp(def, u.team, r[18], false).champ;
+      u.champ = makeChamp(def, (u.team === 1 ? 1 : 0) as Team, ROLES[r[18]] ?? 'mid', false).champ;
       u.champ!.isPlayer = true; // never run AI on a guest
     }
     const c = u.champ!;
@@ -3295,8 +3972,8 @@ function applySnap(s: Snap) {
     if (!me) return;
     awaitingYou = 0;
     G = {
-      t: s.t, units, projs: [], pending: [], zones: [], fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
-      open: new Set(), player: me, cam: { x: me.x, y: me.y }, camLocked: true, zoom: TOUCH ? clamp(Math.min(W, H) / 700, 0.55, 1) : 1, marker: null, focus: null,
+      t: s.t, units, projs: [], pending: [], zones: [], camps: [], drakes: [0, 0], colossus: [0, 0], seen: [new Set(), new Set()], visionT: 0, platesGone: false, fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
+      open: new Set(), player: me, cam: { x: me.x, y: me.y }, camLocked: true, zoom: TOUCH ? 0.7 : 0.62, marker: null, focus: null,
     };
     buildHud();
     enterMatch();
@@ -3413,6 +4090,10 @@ function guestTick(dt: number) {
   for (const b of beams) b.t -= dt;
   while (beams.length && beams[0].t <= 0) beams.shift();
   if (G.marker && (G.marker.t -= dt) <= 0) G.marker = null;
+  if ((G.visionT -= dt) <= 0) {
+    G.visionT = 0.2;
+    computeVision();
+  }
 }
 
 // ---- lobby ----
@@ -3466,7 +4147,7 @@ function findMatch() {
   sfx('click');
   setQueueUi(true);
   mmQueue(
-    { name: myName || 'Summoner', mmr: rating.mmr, mode: mmMode },
+    { name: myName || 'Summoner', mmr: rating.mmr, mode: mmMode, role: soloRole },
     {
       onStatus: (t) => ($('mmstatus').textContent = t),
       onFound: (id, size, timeout) => showFound(id, size, timeout),
@@ -3495,7 +4176,7 @@ function cancelQueue() {
 function showFound(id: string, size: number, timeout: number) {
   foundId = id;
   $('found').classList.remove('hidden', 'accepted');
-  $('fsub').textContent = `${mmMode === 'ranked' ? 'Ranked' : 'Co-op vs AI'} · ${size} player${size > 1 ? 's' : ''}${size < (mmMode === 'ranked' ? 6 : 3) ? ' · bots fill the rest' : ''}`;
+  $('fsub').textContent = `${mmMode === 'ranked' ? 'Ranked 5v5' : 'Co-op vs AI'} · ${size} player${size > 1 ? 's' : ''}${size < (mmMode === 'ranked' ? 10 : 5) ? ' · bots fill the rest' : ''}`;
   sfx('levelUp');
   if (document.hidden) document.title = '⚔ Match found! · Rift Clash';
   const end = performance.now() + timeout * 1000;
@@ -3552,7 +4233,7 @@ async function enterMatchLobby(info: MatchInfo) {
   } else {
     lobbyStatus('Joining the match lobby…');
     try {
-      await joinLobby(info.code, myName || 'Summoner', '', { mmId: info.you, mmr: rating.mmr }, 10);
+      await joinLobby(info.code, myName || 'Summoner', '', { mmId: info.you, mmr: rating.mmr, role: soloRole }, 10);
       clearInterval(draftTimer);
       draftTimer = window.setInterval(() => {
         if (draftLeft < 0 || running) return;
@@ -3595,7 +4276,7 @@ function rateMatch(won: boolean): string {
   if (m.mode === 'ranked') {
     const meTeam = G.player.team;
     const foes = m.players.filter((q) => q.team !== meTeam).map((q) => q.mmr);
-    while (foes.length < 3) foes.push(BOT_MMR.normal);
+    while (foes.length < 5) foes.push(BOT_MMR.normal);
     opp = foes.reduce((a, b) => a + b, 0) / foes.length;
   }
   const before = tierOf(rating.mmr).name;
@@ -3635,7 +4316,7 @@ function renderLobby() {
     $('lplayers').innerHTML = teams
       .map((team) => {
         const seats = mm.players.filter((q) => q.team === team);
-        const rows = Array.from({ length: 3 }, (_, i) => {
+        const rows = Array.from({ length: 5 }, (_, i) => {
           const s = seats[i];
           return s ? row(net.players.find((q) => q.mmId === s.id), s) : row(undefined);
         }).join('');
@@ -3660,7 +4341,7 @@ function hostSync() {
   if (net.role !== 'host') return;
   const seat = mmMatch?.players.find((q) => q.id === mmMatch!.you);
   if (net.players.slice(1).some((q) => q.pick === picked)) picked = net.players[0]?.pick ?? '';
-  net.players[0] = { id: 'host', name: myName, pick: picked, host: true, team: seat?.team ?? 0, mmr: seat?.mmr, mmId: mmMatch?.you };
+  net.players[0] = { id: 'host', name: myName, pick: picked, host: true, team: seat?.team ?? 0, mmr: seat?.mmr, mmId: mmMatch?.you, role: soloRole };
   const mm = mmMatch ? { mode: mmMatch.mode, left: Math.max(0, Math.ceil((draftEnds - performance.now()) / 1000)) } : undefined;
   broadcast({ t: 'lobby', players: net.players, diff: difficulty.id, mm });
   if (mm) draftLeft = mm.left;
@@ -3679,7 +4360,7 @@ net.onMsg = (from, m) => {
             return;
           }
           const pick = net.players.some((q) => q.pick === m.pick) ? '' : m.pick;
-          net.players.push({ id: from, name: m.name.slice(0, 16) || 'Guest', pick, host: false, team: seat?.team ?? 0, mmr: seat?.mmr, mmId: m.mmId });
+          net.players.push({ id: from, name: m.name.slice(0, 16) || 'Guest', pick, host: false, team: seat?.team ?? 0, mmr: seat?.mmr, mmId: m.mmId, role: seat?.role ?? m.role ?? 'fill' });
         }
         hostSync();
         if (running) sendTo(from, { t: 'lobby', players: net.players, diff: difficulty.id });
@@ -3689,6 +4370,7 @@ net.onMsg = (from, m) => {
         const p = net.players.find((q) => q.id === from);
         // each champion can only be picked once per match
         if (p && !net.players.some((q) => q !== p && q.pick === m.pick)) p.pick = m.pick;
+        if (p && m.role) p.role = m.role;
         hostSync();
         break;
       }
@@ -3791,7 +4473,7 @@ async function joinWithCode(raw: string) {
   $('lobby').classList.remove('hidden');
   lobbyStatus(`Joining ${code}…`);
   try {
-    await joinLobby(code, myName, picked);
+    await joinLobby(code, myName, picked, { role: soloRole });
     renderLobby();
   } catch (e) {
     lobbyStatus((e as Error).message, true);
@@ -3807,7 +4489,7 @@ function startMultiplayer() {
   if (!picked) picked = CHAMPS[0].id;
   const used = new Set(net.players.map((p) => p.pick).filter(Boolean));
   const free = CHAMPS.filter((c) => !used.has(c.id)).sort(() => Math.random() - 0.5);
-  const humans: Human[] = net.players.map((p) => ({ peer: p.id, name: p.name, pick: p.pick || free.shift()!.id, team: p.team ?? 0 }));
+  const humans: Human[] = net.players.map((p) => ({ peer: p.id, name: p.name, pick: p.pick || free.shift()!.id, team: p.team ?? 0, role: (p.role ?? 'fill') as Role | 'fill' }));
   picked = humans.find((h) => h.peer === 'host')!.pick;
   if (mmMatch) {
     // co-op difficulty follows the group's rating; ranked bots play Normal
@@ -3884,7 +4566,7 @@ let demoSwitchAt = 0;
 function startDemo() {
   newGame(CHAMPS[Math.floor(Math.random() * CHAMPS.length)].id);
   G.player.champ!.isPlayer = false;
-  G.zoom = TOUCH ? 0.5 : 0.8;
+  G.zoom = TOUCH ? 0.45 : 0.55;
   demoMode = true;
   demoRestart = 0;
   demoTarget = null;
@@ -3988,7 +4670,33 @@ function champDetail(id: string) {
       .map((a, i) => `<li><b>${'QWER'[i]}</b><div><strong>${a.name}</strong> <em>${a.cd}s · ${a.cost} mana</em><p>${a.desc}</p></div></li>`)
       .join('')}</ul>`;
 }
+function buildRoles() {
+  const el = $('roles');
+  const opts: (Role | 'fill')[] = ['top', 'jungle', 'mid', 'adc', 'support', 'fill'];
+  try {
+    const saved = localStorage.getItem('rift-role');
+    if (saved && (opts as string[]).includes(saved)) soloRole = saved as Role | 'fill';
+  } catch {
+    // storage unavailable
+  }
+  el.innerHTML = `<span>Position</span>` + opts.map((r) => `<button data-r="${r}" class="${r === soloRole ? 'on' : ''}">${r === 'fill' ? 'Fill' : ROLE_NAME[r]}</button>`).join('');
+  el.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+    if (!b) return;
+    soloRole = b.dataset.r as Role | 'fill';
+    el.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    try {
+      localStorage.setItem('rift-role', soloRole);
+    } catch {
+      // storage unavailable
+    }
+    sfx('click');
+    if (net.role === 'guest') sendToHost({ t: 'pick', pick: picked, role: soloRole });
+    hostSync();
+  });
+}
 function buildMenu() {
+  buildRoles();
   const wrap = $('champs');
   const tabs = $('ctabs');
   tabs.innerHTML = CLASSES.map((k) => `<button data-k="${k}" class="${k === champFilter ? 'on' : ''}">${k}</button>`).join('');
@@ -4035,7 +4743,7 @@ function start() {
 function enterMatch() {
   demoMode = false;
   if (TOUCH) {
-    G.zoom = clamp(Math.min(W, H) / 700, 0.55, 1);
+    G.zoom = clamp(Math.min(W, H) / 900, 0.45, 0.8);
     try {
       void document.documentElement.requestFullscreen?.().then(() =>
         (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => {}),

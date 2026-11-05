@@ -3,7 +3,7 @@
 // signalling server, so no game server is needed.
 import Peer, { type DataConnection } from 'peerjs';
 
-export const MAX_PLAYERS = 3; // co-op lobbies; matchmade ranked lobbies take 6
+export const MAX_PLAYERS = 5; // co-op lobbies; matchmade ranked lobbies take 10
 const PREFIX = 'riftclash-v1-';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -15,12 +15,13 @@ export interface LobbyPlayer {
   team?: 0 | 1;
   mmr?: number;
   mmId?: string; // matchmaking ticket id, so the host can seat players on their team
+  role?: string;
 }
 
 // Everything that crosses the wire. Guests only send hello/pick/cmd.
 export type Msg =
-  | { t: 'hello'; name: string; pick: string; mmId?: string; mmr?: number }
-  | { t: 'pick'; pick: string }
+  | { t: 'hello'; name: string; pick: string; mmId?: string; mmr?: number; role?: string }
+  | { t: 'pick'; pick: string; role?: string }
   | { t: 'cmd'; cmd: Cmd }
   | { t: 'lobby'; players: LobbyPlayer[]; diff: string; mm?: { mode: 'coop' | 'ranked'; left: number } }
   | { t: 'start'; you: number }
@@ -33,7 +34,8 @@ export type Cmd =
   | { c: 'attack'; id: number }
   | { c: 'cast'; s: number; x: number; y: number }
   | { c: 'flash'; x: number; y: number }
-  | { c: 'heal' }
+  | { c: 'heal'; id?: number } // Heal, or Smite (on a target) for junglers
+  | { c: 'ward'; x: number; y: number }
   | { c: 'recall' }
   | { c: 'stop' }
   | { c: 'rank'; s: number }
@@ -102,7 +104,7 @@ export function hostLobby(fixed?: string, capacity = MAX_PLAYERS): Promise<strin
   });
 }
 
-export async function joinLobby(code: string, name: string, pick: string, extra: { mmId?: string; mmr?: number } = {}, tries = 1): Promise<void> {
+export async function joinLobby(code: string, name: string, pick: string, extra: { mmId?: string; mmr?: number; role?: string } = {}, tries = 1): Promise<void> {
   for (let i = 1; ; i++) {
     try {
       return await joinOnce(code, name, pick, extra);
@@ -113,7 +115,7 @@ export async function joinLobby(code: string, name: string, pick: string, extra:
     }
   }
 }
-function joinOnce(code: string, name: string, pick: string, extra: { mmId?: string; mmr?: number }): Promise<void> {
+function joinOnce(code: string, name: string, pick: string, extra: { mmId?: string; mmr?: number; role?: string }): Promise<void> {
   leave();
   return new Promise((resolve, reject) => {
     const peer = new Peer();

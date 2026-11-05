@@ -1925,3 +1925,31 @@ body.touch #mp input {
   font-style: normal;
   font-size: 11px;
 }
+
+/* position picker */
+#roles {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #a99a7a;
+}
+#roles button {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  color: #cdbf9f;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+#roles button.on {
+  border-color: #e8c46a;
+  color: #fff3d6;
+  background: rgba(200, 170, 110, 0.16);
+}

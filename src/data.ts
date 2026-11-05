@@ -1,4 +1,5 @@
 export type Team = 0 | 1;
+export type Side = 0 | 1 | 2; // 2 = neutral (jungle monsters)
 export type DmgType = 'phys' | 'magic' | 'true';
 export type AbilityKind = 'bolt' | 'nova' | 'dash' | 'buff' | 'beam' | 'zone' | 'ally';
 export interface Vec {
@@ -96,32 +97,37 @@ export interface ItemDef {
 }
 
 // ---------- map ----------
-export const MAP = 4000;
+// Genre-standard proportions: a ~14k square with 750-range turrets, three lanes, a diagonal river and
+// four walled jungle quadrants. Blue's fountain is bottom-left, Red's top-right.
+export const MAP = 14000;
 export const BASES: Vec[] = [
-  { x: 260, y: 3740 },
-  { x: 3740, y: 260 },
+  { x: 650, y: 13350 },
+  { x: 13350, y: 650 },
 ];
 export const NEXUS: Vec[] = [
-  { x: 560, y: 3440 },
-  { x: 3440, y: 560 },
+  { x: 1900, y: 12100 },
+  { x: 12100, y: 1900 },
 ];
-export const FOUNTAIN_R = 380;
-export const TEAM_COLOR = ['#3b8cff', '#ff4d4d'];
-export const TEAM_NAME = ['Blue', 'Red'];
+export const FOUNTAIN_R = 560;
+export const TEAM_COLOR = ['#3b8cff', '#ff4d4d', '#c8aa6e'];
+export const TEAM_NAME = ['Blue', 'Red', 'Neutral'];
 export const LANE_NAMES = ['Top', 'Mid', 'Bot'];
 // Lanes run from the blue nexus to the red nexus.
 export const LANES: Vec[][] = [
-  [NEXUS[0], { x: 560, y: 560 }, NEXUS[1]],
+  [NEXUS[0], { x: 1500, y: 9000 }, { x: 1700, y: 1700 }, { x: 9000, y: 1500 }, NEXUS[1]],
   [NEXUS[0], NEXUS[1]],
-  [NEXUS[0], { x: 3440, y: 3440 }, NEXUS[1]],
+  [NEXUS[0], { x: 5000, y: 12500 }, { x: 12300, y: 12300 }, { x: 12500, y: 5000 }, NEXUS[1]],
 ];
 export const RIVER: Vec[] = [
-  { x: 780, y: 780 },
-  { x: 3220, y: 3220 },
+  { x: 1700, y: 1700 },
+  { x: 12300, y: 12300 },
 ];
+// distance along a lane (from its own nexus) for each structure
+export const TURRET_AT = { side: [8900, 5900, 3000], mid: [5300, 4000, 2700] }; // outer, inner, base turret
+export const INHIB_AT = 2050;
 
 export const WAVE_INTERVAL = 30;
-export const FIRST_WAVE = 8;
+export const FIRST_WAVE = 65; // first wave leaves the nexus at 1:05
 
 // ---------- champions ----------
 export const CHAMPS: ChampDef[] = [

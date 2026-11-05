@@ -90,3 +90,17 @@ attacks, executes, ground zones, traps, ally heals and map-wide ultimates.
   the rest go back in line.
 - 30s champion select, each champion once per match. Elo rating (K 48 for the first 10 games, then 28) is
   stored locally, with tiers Stone → Mythic.
+
+## Full-size 5v5 rift
+
+- 14,000-unit map with 700-range turrets (plus radii), three lanes, a diagonal river and four walled jungle
+  quadrants. Walls block movement, dashes and sight; units path around them with A* on a 100-unit grid.
+- Positions: Top, Jungle, Mid, Bot, Support (pick one or Fill). Bots fill empty roles with suitable champions.
+- Per lane: outer (with plating until 14:00), inner and inhibitor turrets, then the inhibitor (rebuilds after
+  5 min); two nexus turrets guard the nexus. Turrets warm up on champions (+40% per shot, up to +120%).
+- Jungle (original names): Azure Golem (mana regen + haste blessing), Ember Brute (burning, slowing attacks),
+  Bog Toad, Razorbeaks, Thornback Boars, Stonehulks, two River Skitters, the Storm Drake (stacking team
+  damage) and the Abyssal Colossus (empowered minions, faster recall). Camps leash and reset; blessings
+  transfer on kill. Junglers take Smite (F) and a companion bonus against monsters.
+- Fog of war and brush: champions, minions, turrets and wards light up the map for their team; walls block
+  sight and brush hides units from anyone outside it. Trinket ward on 4 (two charges).
