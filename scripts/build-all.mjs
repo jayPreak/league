@@ -61,26 +61,58 @@ await pool(ids, 8, async (id) => {
     const width = raw?.mLineWidth || 0;
     const radius = (raw?.castRadius?.[1] ?? raw?.castRadius?.[0] ?? 0) || dv(/^(radius|aoeradius|hitradius)/i);
     const lower = text.toLowerCase();
-    let kind = 'nova', selfCenter = false;
-    const dashy = /\b(dash|dashes|leap|leaps|jump|jumps|blink|teleport|charge)\b/.test(lower.slice(0, 220));
-    if (dashy && range > 1) kind = 'dash';
-    else if (speed > 0 && width > 0) kind = 'bolt';
-    else if (range > 1 && radius > 0 && (raw?.castRadius || /target (area|location)|at the target/.test(lower))) kind = 'zone';
-    else if (range > 1 && speed > 0) kind = 'bolt';
-    else if (range <= 1 && calcName) { kind = 'nova'; selfCenter = true; }
-    else if (!calcName && /shield|gain|empower|bonus|enhanced|heal|move speed/.test(lower)) kind = 'buff';
-    else if (range > 1 && calcName) kind = 'bolt';
-    else if (!calcName) kind = 'buff';
-    const aim = kind === 'bolt' ? { shape: 'line', w: width || 100, reach: range || 900 }
-      : kind === 'zone' ? { shape: 'circle', r: radius || 250, reach: range || 800 }
-      : kind === 'dash' ? { shape: 'line', w: width || 100, reach: range || 500 }
-      : kind === 'nova' ? { shape: 'self', r: radius || 350, reach: 0 }
-      : { shape: 'none', reach: 0 };
+    // targeting data straight from the client: what the in-game indicator draws
+    const tt = raw?.mTargetingTypeData?.__type ?? '';
+    const tg = raw?.mClientData?.mTargeterDefinitions ?? [];
+    const lv = (f) => (f && typeof f === 'object' ? (f.mPerLevelValues?.[1] ?? f.mPerLevelValues?.[0] ?? 0) : typeof f === 'number' ? f : 0);
+    const lineT = tg.find((x) => /Line/.test(x.__type));
+    const aoeT = tg.find((x) => /Aoe/.test(x.__type));
+    const coneT = tg.find((x) => /Cone/.test(x.__type) && x.coneAngleDegrees);
+    const rngT = tg.find((x) => /Range/.test(x.__type) && x.overrideBaseRange);
+    const lineW = lv(lineT?.lineWidth), lineLen = lv(lineT?.overrideBaseRange);
+    const aoeR = lv(aoeT?.overrideRadius) || lv(aoeT?.constraintRange) || 0;
+    const selfR = lv(rngT?.overrideBaseRange);
+    const dashy = /\b(dash|dashes|leap|leaps|jump|jumps|blink|blinks|teleport|teleports|charges)\b/.test(lower.slice(0, 220));
+    const rad = aoeR || radius;
+    let kind = 'nova', selfCenter = false, aim, cone;
+    const dir = /Direction|Location/.test(tt) && !aoeT || lineT;
+    if (/^Self/.test(tt) || (!tt && !lineT && !aoeT && !coneT && range <= 1)) {
+      kind = 'nova'; selfCenter = true;
+      aim = { shape: 'self', r: selfR || radius || (range > 1 ? range : 350), reach: 0 };
+    } else if (coneT) {
+      kind = 'bolt'; cone = coneT.coneAngleDegrees;
+      const reach = lv(coneT.coneRange) || range || 600;
+      aim = { shape: 'cone', deg: cone, reach };
+    } else if (dashy && range > 1) {
+      kind = 'dash';
+      aim = { shape: 'line', w: lineW || width || 100, reach: range };
+    } else if (/^Target/.test(tt) && !lineT) {
+      kind = 'zone';
+      aim = { shape: 'target', reach: range || 600 };
+    } else if (dir && (speed > 0 || lineT)) {
+      kind = 'bolt';
+      aim = { shape: 'line', w: lineW || width || 100, reach: lineLen || range || 900 };
+    } else if (tt === 'Area' || aoeT || (range > 1 && rad > 0)) {
+      kind = 'zone';
+      aim = { shape: 'circle', r: rad || 250, reach: range || 800 };
+    } else if (speed > 0 && range > 1) {
+      kind = 'bolt';
+      aim = { shape: 'line', w: width || 100, reach: range };
+    } else if (range <= 1 && calcName) {
+      kind = 'nova'; selfCenter = true;
+      aim = { shape: 'self', r: radius || 350, reach: 0 };
+    } else if (!calcName) {
+      kind = 'buff';
+      aim = { shape: 'none', reach: 0 };
+    } else {
+      kind = 'bolt';
+      aim = { shape: 'line', w: width || 100, reach: range || 800 };
+    }
     const stun = dv(/^stun(duration|time|dur)?$/i), slow = dv(/slow(percent|amount|pct)?$/i), root = dv(/^root(duration|time)?$/i), kb = dv(/^(knockup|airborne)/i);
     return {
       name: s.name, desc: text, kind, cds: s.cooldown.slice(0, ranks), costs: s.cost.slice(0, ranks), ranges: s.range.slice(0, ranks),
       costType: (s.costType || '').trim(), range, base: +base.toFixed(2), perLvl: +perLvl.toFixed(2), adR: +adR.toFixed(3), apR: +apR.toFixed(3), dmgType,
-      speed: speed || undefined, width: width || undefined, radius: radius || undefined, selfCenter: selfCenter || undefined, aim,
+      speed: speed || undefined, radius: (aim.shape === 'self' ? aim.r : aim.shape === 'circle' ? aim.r : radius) || undefined, selfCenter: selfCenter || undefined, aim, width: (aim.shape === 'line' ? aim.w : width) || undefined,
       stun: stun > 0 && stun < 5 ? stun : undefined, slow: slow > 0 ? (slow > 1 ? slow / 100 : slow) : undefined, root: root > 0 && root < 5 ? root : undefined, knockup: kb > 0 && kb < 3 ? kb : undefined,
       derived: !!calcName,
     };

@@ -54,6 +54,7 @@ export const ROSTER: RosterEntry[] = [
   { id: 'morgana', color: '#a86bff', build: B.mage, hints: [h('bolt', '#c89bff', { width: 140, speed: 1200 }), h('zone', '#8a4bd8', { radius: 275 }), h('ally', '#d8c0ff', { radius: 100 }), h('nova', '#7a3bd8', { selfCenter: true, radius: 600 })] },
   { id: 'zed', color: '#d83a3a', build: B.ad, hints: [h('bolt', '#ff5a5a', { width: 90, speed: 1700 }), h('dash', '#7a2a2a'), h('nova', '#ff6a6a', { selfCenter: true, radius: 290 }), h('dash', '#ff2a2a', { execute: 0.5 })] },
   { id: 'darius', color: '#b8442a', build: B.fighter, hints: [h('nova', '#ff6a4a', { selfCenter: true, radius: 425 }), h('buff', '#ff8a6a'), h('nova', '#d8c0a0', { selfCenter: true, radius: 535 }), h('dash', '#ff3a1a', { execute: 0.4 })] },
+  { id: 'lillia', color: '#e6a0ff', build: B.mage, hints: [h('nova', '#ffb0f0', { selfCenter: true, radius: 485 }), h('zone', '#d89bff', { radius: 250 }), h('bolt', '#b8ff8a', { width: 85, speed: 1750 }), h('nova', '#e8d0ff', { selfCenter: true, radius: 900 })] },
   { id: 'ahri', color: '#ff8ac8', build: B.mage, hints: [h('bolt', '#ffb8e0', { width: 100, speed: 2500 }), h('buff', '#ff9ac8'), h('bolt', '#ff6ab0', { width: 120, speed: 1550 }), h('dash', '#ffc0e8')] },
 ];
 
@@ -81,6 +82,7 @@ const AIM: Record<string, [string, string, string, string]> = {
   morgana: ['line:140:1250', 'circle:275:900', 'target:800', 'self:600'],
   zed: ['line:100:900', 'line:60:650', 'self:290', 'target:625'],
   darius: ['self:425', 'none', 'cone:70:535', 'target:460'],
+  lillia: ['self:485', 'circle:250:700', 'line:85:1000', 'self:1500'],
   ahri: ['line:100:970', 'self:700', 'line:120:975', 'line:100:450'],
 };
 const parseAim = (spec: string): AimShape => {
@@ -204,7 +206,7 @@ function buildGeneric(): ChampDef[] {
     const abilities: AbilityDef[] = g.spells.map((sp) => ({
       name: sp.name, desc: sp.desc, kind: sp.kind, cd: sp.cds[0] ?? 8, cds: sp.cds, cost: sp.costs[0] ?? 0, costs: sp.costs, costType: sp.costType,
       range: sp.range, ranges: sp.ranges, base: sp.base > 1500 ? 0 : sp.base, perLvl: sp.base > 1500 ? 0 : sp.perLvl, adR: sp.adR, apR: sp.apR, dmgType: sp.dmgType, perRank: true,
-      color, width: sp.width, speed: sp.speed, radius: sp.radius, selfCenter: sp.selfCenter, aim: sp.aim,
+      color, width: sp.aim.shape === 'cone' ? Math.min(500, Math.max(150, 2 * sp.aim.reach * Math.tan(((sp.aim.deg ?? 40) * Math.PI) / 360))) : sp.width, pierce: sp.aim.shape === 'cone' || (sp.kind === 'bolt' && /\b(all|every) enem/i.test(sp.desc)) || undefined, speed: sp.speed, radius: sp.aim.shape === 'target' ? sp.radius || 90 : sp.radius, selfCenter: sp.selfCenter, aim: sp.aim,
       stun: sp.stun, slow: sp.slow, slowT: sp.slow ? 1.5 : undefined, root: sp.root, knockup: sp.knockup,
     }));
     return {

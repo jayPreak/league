@@ -1,0 +1,1483 @@
+{
+ "id": "Lillia",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Lillia",
+ "title": "the Bashful Bloom",
+ "tags": [
+  "Fighter",
+  "Mage"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 605,
+  "hpperlevel": 105,
+  "mp": 410,
+  "mpperlevel": 50,
+  "movespeed": 330,
+  "armor": 24,
+  "armorperlevel": 4.5,
+  "spellblock": 32,
+  "spellblockperlevel": 1.55,
+  "attackrange": 325,
+  "hpregen": 2.5,
+  "hpregenperlevel": 0.55,
+  "mpregen": 11.5,
+  "mpregenperlevel": 0.95,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 61,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 2.7,
+  "attackspeed": 0.625
+ },
+ "basicAttack": {
+  "range": 325,
+  "attackSpeed": 0.625,
+  "asRatio": {
+   "baseValue": 0.625,
+   "__type": "ModifiableFloat"
+  }
+ },
+ "passive": {
+  "name": "Dream-Laden Bough",
+  "description": "Hitting a champion or monster with a skill will deal additional max Health damage over time.",
+  "values": {
+   "LilliaPDoT": {
+    "DataValues": {
+     "MonsterHealingMod": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "Duration": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "DotDamageFlat": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "MultipleHealMod": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "LowHealthMod": [
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5
+     ],
+     "LowHealthThreshold": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "DotDamagePercent": [
+      0.05000000074505806,
+      0.05000000074505806,
+      0.05000000074505806,
+      0.05000000074505806,
+      0.05000000074505806,
+      0.05000000074505806,
+      0.05000000074505806
+     ],
+     "BaseHealPercentConversion": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "DotTicks": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "AttackSpeedSlow": [
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896
+     ],
+     "MoveSpeedSlow": [
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896
+     ]
+    },
+    "calcs": {
+     "{77823978}": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 0.05000000074505806,
+        "mEndValue": 0.10999999940395355,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "mPrecision": 1,
+      "__type": "GameCalculation"
+     },
+     "HealPerSecond": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 7,
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       },
+       {
+        "mCoefficient": 0.10000000149011612,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "{44c2f9d7}": {
+      "mFormulaParts": [
+       {
+        "mDataValue": "DotDamageFlat",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       {
+        "mCoefficient": 0.05000000074505806,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "{8abdf228}": {
+      "mMultiplier": {
+       "mDataValue": "LowHealthMod",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 10,
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       },
+       {
+        "mCoefficient": 0.10000000149011612,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "DotPercentTotal": {
+      "mFormulaParts": [
+       {
+        "mDataValue": "DotDamagePercent",
+        "__type": "NamedDataValueCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "__type": "GameCalculation"
+     },
+     "MonsterDamageCap": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 40,
+        "mEndValue": 100,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "{18849f10}": {
+      "mFormulaParts": [
+       {
+        "mDataValue": "BaseHealPercentConversion",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       {
+        "mCoefficient": 0.0024999999441206455,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "__type": "GameCalculation"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "tags": [
+     "PositiveEffect_Boon"
+    ]
+   },
+   "LilliaP": {
+    "DataValues": {
+     "Duration": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "DotDamagePercent": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "DotTicks": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "MonsterHealingPercent": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "ChampionHealingPercent": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "LargeMonsterHealMod": [
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5
+     ],
+     "SmallMonsterHealMod": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "MultiHealMod": [
+      0.15000000596046448,
+      0.15000000596046448,
+      0.15000000596046448,
+      0.15000000596046448,
+      0.15000000596046448,
+      0.15000000596046448,
+      0.15000000596046448
+     ]
+    },
+    "calcs": {
+     "DotPercentTotal": {
+      "mSimpleTooltipCalculationDisplay": 6,
+      "mFormulaParts": [
+       {
+        "mDataValue": "DotDamagePercent",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       {
+        "mCoefficient": 0.012500000186264515,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "mPrecision": -1,
+      "__type": "GameCalculation"
+     },
+     "MonsterDamageCap": {
+      "mExpandedTooltipCalculationDisplay": 5,
+      "mFormulaParts": [
+       {
+        "mStartValue": 70,
+        "mEndValue": 180,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "{b5d0316f}": {
+      "mFormulaParts": [
+       {
+        "mNumber": 6.5,
+        "__type": "NumberCalculationPart"
+       },
+       {
+        "mCoefficient": 0.02500000037252903,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "{395ffd44}": {
+      "mMultiplier": {
+       "mDataValue": "SmallMonsterHealMod",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "mModifiedGameCalculation": "{b5d0316f}",
+      "__type": "GameCalculationModified"
+     },
+     "ChampionHeal": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 1,
+        "mEndValue": 15,
+        "mScaleByStatProgressionMultiplier": true,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       },
+       {
+        "mCoefficient": 0.05000000074505806,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "ChampionHealTT": {
+      "mMultiplier": {
+       "mDataValue": "DotTicks",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "tooltipOnly": true,
+      "mModifiedGameCalculation": "ChampionHeal",
+      "__type": "GameCalculationModified"
+     },
+     "MonsterHealTT": {
+      "mMultiplier": {
+       "mDataValue": "DotTicks",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "tooltipOnly": true,
+      "mModifiedGameCalculation": "{b5d0316f}",
+      "__type": "GameCalculationModified"
+     },
+     "{7969ffc2}": {
+      "mMultiplier": {
+       "mPart1": {
+        "mDataValue": "DotTicks",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mPart2": {
+        "mDataValue": "SmallMonsterHealMod",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "__type": "ProductOfSubPartsCalculationPart"
+      },
+      "tooltipOnly": true,
+      "mModifiedGameCalculation": "{b5d0316f}",
+      "__type": "GameCalculationModified"
+     },
+     "DotPercentTooltip": {
+      "mMultiplier": {
+       "mNumber": 0.009999999776482582,
+       "__type": "NumberCalculationPart"
+      },
+      "tooltipOnly": true,
+      "mModifiedGameCalculation": "DotPercentTotal",
+      "__type": "GameCalculationModified"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "tags": [
+     "PositiveEffect_Boon"
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Blooming Blows",
+   "description": "Passively, Lillia gains stacking Move Speed when hitting enemies with spells. She can activate this to deal magic damage to nearby enemies, dealing extra true damage on the edge.",
+   "tooltip": "<spellPassive>Passive:</spellPassive> Lillia's Ability hits grant <speed>{{ prancespeed }} Move Speed</speed> for {{ pranceduration }} seconds, stacking up to {{ prancemaxstacks }} times.<br /><br /><spellActive>Active:</spellActive> Lillia whirls her censer, dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage>, plus an additional <trueDamage>{{ bonustruedamage }} true damage</trueDamage> at the outer edge.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    6,
+    5.5,
+    5,
+    4.5,
+    4
+   ],
+   "ddCost": [
+    65,
+    65,
+    65,
+    65,
+    65
+   ],
+   "ddRange": [
+    450,
+    450,
+    450,
+    450,
+    450
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Cooldown",
+     "Move Speed",
+     "Magic Damage",
+     "True Damage"
+    ],
+    "effect": [
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ prancebonusperstack*100.000000 }}% -> {{ prancebonusperstacknl*100.000000 }}%",
+     "{{ flatdamagebase }} -> {{ flatdamagebaseNL }}",
+     "{{ flatdamagetrue }} -> {{ flatdamagetrueNL }}"
+    ]
+   },
+   "game": {
+    "LilliaQ": {
+     "DataValues": {
+      "MinimumRadius": [
+       225,
+       225,
+       225,
+       225,
+       225,
+       225,
+       225
+      ],
+      "MaximumRadius": [
+       485,
+       485,
+       485,
+       485,
+       485,
+       485,
+       485
+      ],
+      "FlatDamageBase": [
+       25,
+       35,
+       45,
+       55,
+       65,
+       75,
+       85
+      ],
+      "FlatDamageTrue": [
+       25,
+       35,
+       45,
+       55,
+       65,
+       75,
+       85
+      ],
+      "MinionDamageMod": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "PranceDuration": [
+       6.5,
+       6.5,
+       6.5,
+       6.5,
+       6.5,
+       6.5,
+       6.5
+      ],
+      "PranceMaxStacks": [
+       4,
+       4,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "PranceFalloffTime": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "PranceBonusPerStack": [
+       0.019999999552965164,
+       0.029999999329447746,
+       0.03999999910593033,
+       0.05000000074505806,
+       0.05999999865889549,
+       0.07000000029802322,
+       0.07999999821186066
+      ],
+      "APRatio": [
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "FlatDamageBase",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "PranceSpeed": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "PranceBonusPerStack",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.0003000000142492354,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "mDisplayAsPercent": true,
+       "__type": "GameCalculation"
+      },
+      "BonusTrueDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "FlatDamageTrue",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      4,
+      6,
+      5.5,
+      5,
+      4.5,
+      4,
+      4
+     ],
+     "castRange": [
+      500,
+      500,
+      500,
+      500,
+      500,
+      500,
+      500
+     ],
+     "mana": [
+      65,
+      65,
+      65,
+      65,
+      65,
+      65
+     ],
+     "castTime": 0.25,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_SignatureSpell",
+      "Trait_Melee_SmallWindup",
+      "Trait_AoE"
+     ]
+    },
+    "LilliaQSpellPassive": {
+     "DataValues": {
+      "DodgeDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "MSDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "MSAmount": [
+       0.20000000298023224,
+       0.30000001192092896,
+       0.4000000059604645,
+       0.5,
+       0.6000000238418579,
+       0.699999988079071,
+       0.800000011920929
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      24,
+      24,
+      22,
+      20,
+      18,
+      16,
+      14
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "mana": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "missileSpeed": 700,
+     "lineWidth": 160,
+     "tags": [
+      "PositiveEffect_MoveBlock"
+     ]
+    },
+    "LilliaPranceStack": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      24,
+      24,
+      22,
+      20,
+      18,
+      16,
+      14
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "mana": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "missileSpeed": 700,
+     "lineWidth": 160,
+     "tags": [
+      "PositiveEffect_MoveBlock"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Watch Out! Eep!",
+   "description": "Lillia deals damage in a nearby area, dealing heavy damage in the center.",
+   "tooltip": "Lillia winds up a huge strike, dealing <magicDamage>{{ flatdamage }} magic damage</magicDamage>. Enemies in the center take <magicDamage>{{ flatdamagesweetspot }} damage</magicDamage> instead.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    14,
+    13,
+    12,
+    11,
+    10
+   ],
+   "ddCost": [
+    50,
+    50,
+    50,
+    50,
+    50
+   ],
+   "ddRange": [
+    500,
+    500,
+    500,
+    500,
+    500
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ flatdamagebase }} -> {{ flatdamagebaseNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "LilliaW": {
+     "DataValues": {
+      "FlatDamageBase": [
+       60,
+       80,
+       100,
+       120,
+       140,
+       160,
+       180
+      ],
+      "MaximumDistance": [
+       700,
+       700,
+       700,
+       700,
+       700,
+       700,
+       700
+      ],
+      "MaxSpeed": [
+       500,
+       500,
+       500,
+       500,
+       500,
+       500,
+       500
+      ],
+      "MinimumDistance": [
+       500,
+       500,
+       500,
+       500,
+       500,
+       500,
+       500
+      ],
+      "LandingOffset": [
+       150,
+       150,
+       150,
+       150,
+       150,
+       150,
+       150
+      ],
+      "MaximumCastTime": [
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75
+      ],
+      "MinimumCastTime": [
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579
+      ],
+      "MinimumRadius": [
+       250,
+       250,
+       250,
+       250,
+       250,
+       250,
+       250
+      ],
+      "SweetSpotRadius": [
+       65,
+       65,
+       65,
+       65,
+       65,
+       65,
+       65
+      ],
+      "SweetSpotBonus": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "AnimRangeCutoff": [
+       300,
+       300,
+       300,
+       300,
+       300,
+       300,
+       300
+      ],
+      "MinionDamageMod": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     "calcs": {
+      "FlatDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "FlatDamageBase",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.3499999940395355,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "FlatDamageSweetSpot": {
+       "mMultiplier": {
+        "mDataValue": "SweetSpotBonus",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "FlatDamageBase",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.3499999940395355,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      18,
+      14,
+      13,
+      12,
+      11,
+      10,
+      9
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "mana": [
+      50,
+      50,
+      50,
+      50,
+      50,
+      50
+     ],
+     "tags": [
+      "PositiveEffect_MoveBlock",
+      "Trait_PlayerSelectedDashDirection",
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Swirlseed",
+   "description": "Lillia hurls a seed that damages and slows those it lands on. If it doesn't hit anything, it will continue rolling until it hits a wall or target.",
+   "tooltip": "Lillia lobs a swirlseed overhead, dealing <magicDamage>{{ impactdamagetotal }} magic damage</magicDamage> where it lands and revealing and <status>Slowing</status> them by {{ slowamount*100 }}% for {{ slowduration }} seconds. If no enemies are hit, the seed rolls until it hits an enemy or collides with terrain.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    12,
+    12,
+    12,
+    12,
+    12
+   ],
+   "ddCost": [
+    70,
+    70,
+    70,
+    70,
+    70
+   ],
+   "ddRange": [
+    700,
+    700,
+    700,
+    700,
+    700
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ impactdamage }} -> {{ impactdamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "LilliaE": {
+     "DataValues": {
+      "SlowAmount": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ],
+      "SlowDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "BounceRange": [
+       25000,
+       25000,
+       25000,
+       25000,
+       25000,
+       25000,
+       25000
+      ],
+      "ImpactDamage": [
+       35,
+       60,
+       85,
+       110,
+       135,
+       160,
+       185
+      ],
+      "ImpactRangeCheck": [
+       115,
+       115,
+       115,
+       115,
+       115,
+       115,
+       115
+      ],
+      "HitboxWidth": [
+       350,
+       350,
+       350,
+       350,
+       350,
+       350,
+       350
+      ],
+      "HitboxLength": [
+       200,
+       200,
+       200,
+       200,
+       200,
+       200,
+       200
+      ],
+      "AnimCutoffRange": [
+       350,
+       350,
+       350,
+       350,
+       350,
+       350,
+       350
+      ],
+      "APRatio": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     "calcs": {
+      "ImpactDamageTotal": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "ImpactDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12
+     ],
+     "castRange": [
+      700,
+      700,
+      700,
+      700,
+      700,
+      700,
+      700
+     ],
+     "castRadius": [
+      70,
+      70,
+      70,
+      70,
+      70,
+      70,
+      70
+     ],
+     "mana": [
+      70,
+      70,
+      70,
+      70,
+      70,
+      70
+     ],
+     "missileSpeed": 1750,
+     "castTime": 0.3499999940395355,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_Ranged_StopsFirstHit",
+      "Trait_Low_Damage",
+      "Trait_AoE"
+     ]
+    },
+    "LilliaERollingMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      14,
+      14,
+      13,
+      12,
+      11,
+      10,
+      9
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "lineWidth": 85
+    },
+    "LilliaESpellPassive": {
+     "DataValues": {
+      "DodgeDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "MSDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "MSAmount": [
+       0.20000000298023224,
+       0.30000001192092896,
+       0.4000000059604645,
+       0.5,
+       0.6000000238418579,
+       0.699999988079071,
+       0.800000011920929
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      24,
+      24,
+      22,
+      20,
+      18,
+      16,
+      14
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "mana": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "missileSpeed": 700,
+     "lineWidth": 160,
+     "tags": [
+      "PositiveEffect_MoveBlock"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Lilting Lullaby",
+   "description": "Lillia causes all enemies with Dream Dust on them to become Drowsy before falling asleep. Those enemies will take extra damage on being forcibly woken up.",
+   "tooltip": "Lillia causes all enemy champions with <keywordMajor>Dream Dust</keywordMajor> to become <status>Drowsy</status> for {{ drowsyduration }} seconds. Afterward, they fall <status>Asleep</status> for {{ sleepduration }} seconds.<br /><br />When awakened by damage, they take an additional <magicDamage>{{ totaldamage }} magic damage</magicDamage>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    150,
+    130,
+    110
+   ],
+   "ddCost": [
+    50,
+    50,
+    50
+   ],
+   "ddRange": [
+    1600,
+    1600,
+    1600
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Cooldown",
+     "Break Damage",
+     "Duration"
+    ],
+    "effect": [
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ breakdamagebase }} -> {{ breakdamagebaseNL }}",
+     "{{ sleepduration }} -> {{ sleepdurationNL }}"
+    ]
+   },
+   "game": {
+    "LilliaR": {
+     "DataValues": {
+      "DrowsyDuration": [
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "SleepDuration": [
+       2.25,
+       2.5,
+       2.75,
+       3,
+       3.25,
+       3.5,
+       3.75
+      ],
+      "ImpactDamage": [
+       25,
+       25,
+       25,
+       25,
+       25,
+       25,
+       25
+      ],
+      "BreakDamageBase": [
+       50,
+       100,
+       150,
+       200,
+       250,
+       300,
+       350
+      ],
+      "InitialSlow": [
+       -0.10000000149011612,
+       -0.10000000149011612,
+       -0.10000000149011612,
+       -0.10000000149011612,
+       -0.10000000149011612,
+       -0.10000000149011612,
+       -0.10000000149011612
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BreakDamageBase",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.4000000059604645,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      150,
+      150,
+      130,
+      110,
+      110,
+      110,
+      110
+     ],
+     "castRange": [
+      1600,
+      1600,
+      1600,
+      1600,
+      1600,
+      1600,
+      1600
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      50,
+      50,
+      50,
+      50,
+      50,
+      50
+     ],
+     "castTime": 0.4000000059604645,
+     "lineWidth": 100,
+     "tags": [
+      "Trait_Ultimate",
+      "Trait_ImmobilizingCCSpell",
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    },
+    "LilliaRExpungeMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      19500,
+      19500,
+      19500,
+      19500,
+      19500,
+      19500,
+      19500
+     ],
+     "missileSpeed": 300
+    },
+    "LilliaRExpungeMissileTwo": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      19500,
+      19500,
+      19500,
+      19500,
+      19500,
+      19500,
+      19500
+     ],
+     "missileSpeed": 300
+    },
+    "LilliaRSleep": {
+     "DataValues": {},
+     "calcs": {}
+    },
+    "LilliaRSpellPassive": null
+   }
+  }
+ ]
+}

@@ -41,7 +41,7 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
 
 - `scripts/build-all.mjs` pulls every champion, the Summoner's Rift item list and the rune trees from Riot Data Dragon
   (plus CommunityDragon for per-rank damage numbers) and downloads icons into `public/img`.
-- **20 champions keep their hand-written kits** (`src/kits`). The other **153** run on the generic ability engine
+- **21 champions have hand-written kits (the original 20 plus Lillia)** (`src/kits`). The other **152** run on the generic ability engine
   (`src/champions/generic.json`): stats, text, cooldowns, costs and ranges are exact; damage and ratios are evaluated from
   the CommunityDragon calculations; **the ability shape (skillshot / ground target / dash / self nova) and CC durations are
   inferred**, so their kits are approximations (no recasts, transforms, summons or passives beyond text). A few spells that
@@ -62,3 +62,14 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
   Stats are tracked on the host only, so guests in multiplayer see host-side data only when hosting.
 - **Mobile**: portrait and landscape; pinch zooms in, zoom-out is locked to the default view; Safari page-zoom gestures are blocked.
   Tested in WebKit 18 (Playwright) emulating an iPhone 14, not on a physical device.
+
+
+## Full-game test (every champion)
+
+`scripts/full-game-test.mjs` (needs `npm run dev` on :5173, puppeteer-core and Chrome) plays one complete 5v5 bot match per
+champion with that champion as a bot (AI-driven, headless simulation) and checks for exceptions, NaN state, spell use, damage,
+item purchases and match completion.
+
+Last run: **173 champions, 173 games, 0 crashes, 0 NaN states**, every champion cast spells, dealt damage and bought items.
+4 games hit the 30-minute cap without a winner (Anivia, Sion, Trundle, Kennen: bot siege stalemates, not errors).
+Known weak spots: Fizz Q has no parsed damage (generic engine), Hwei and other multi-form champions are approximations.

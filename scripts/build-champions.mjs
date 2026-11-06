@@ -3,7 +3,7 @@
 //  - CommunityDragon (client game data export): exact per-rank DataValues, calculations, cooldowns, costs, ranges
 // Nothing here is hand-typed; anything missing is recorded under "unverified".
 import { mkdirSync, writeFileSync } from 'node:fs';
-const IDS = ['MasterYi','Twitch','MonkeyKing','Yuumi','Naafiri','Irelia','Lux','Rengar','Garen','Ashe','Annie','Malphite','Ezreal','Jinx','Leona','Blitzcrank','Morgana','Zed','Darius','Ahri'];
+const IDS = process.env.ONLY ? process.env.ONLY.split(',') : ['MasterYi','Twitch','MonkeyKing','Yuumi','Naafiri','Irelia','Lux','Rengar','Garen','Ashe','Annie','Malphite','Ezreal','Jinx','Leona','Blitzcrank','Morgana','Zed','Darius','Ahri'];
 const [ver] = await (await fetch('https://ddragon.leagueoflegends.com/api/versions.json')).json();
 mkdirSync('src/champions/data', { recursive: true });
 const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); };

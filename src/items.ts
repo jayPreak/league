@@ -80,5 +80,7 @@ export function recommend(tags: string[]): string[] {
     // avoid stacking the same ability-haste-only profile twice: skip near-duplicates by name family
     if (pick.length < 5) pick.push(it);
   }
-  return [BOOTS[tags[0]] ?? '3020', ...pick.map((p) => p.id)];
+  const has = (id: string) => SHOP_ITEMS.some((i) => i.id === id);
+  const boots = [BOOTS[tags[0]], '3020', '3047', '3009', '3006', '1001'].find((b) => b && has(b))!;
+  return [boots, ...pick.map((p) => p.id)];
 }

@@ -2242,7 +2242,7 @@ function aiShop(u: Unit) {
   let guard = 12;
   while (c.buildIdx < c.def.build.length && guard-- > 0) {
     const target = c.def.build[c.buildIdx];
-    if (c.items.includes(target)) {
+    if (c.items.includes(target) || !ITEM_MAP[target]) {
       c.buildIdx++;
       continue;
     }
@@ -3847,8 +3847,8 @@ function renderShop() {
         return `<button class="item${rec.has(it.id) ? ' rec' : ''}${own ? ' own' : ''}" data-id="${it.id}" ${off ? 'disabled' : ''}>${itemImg(it)}<span class="cost">${q.cost}${q.cost !== it.cost ? `<s>${it.cost}</s>` : ''}</span><b>${it.name}</b><small>${it.desc}</small></button>`;
       })
       .join('');
-  if (hudCache.get('shop') !== html + note + c.gold) {
-    hudCache.set('shop', html + note + c.gold);
+  if (hudCache.get('shop') !== html + note) {
+    hudCache.set('shop', html + note);
     $('shopnote').textContent = note;
     $('shopgrid').innerHTML = html;
   }
