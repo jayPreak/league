@@ -1,4 +1,11 @@
 import './style.css';
+import { quote, iconUrl } from './items';
+import { openDraft } from './draft';
+import { renderPost } from './postmatch';
+import type { PostData } from './postmatch';
+import { runeByKey, runeIcon } from './runes';
+import { defaultPage, loadPage, pageStats } from './runes';
+import type { RunePage } from './runes';
 import {
   BASES,
   CHAMPS,
@@ -18,6 +25,7 @@ import {
   INHIB_AT,
   WAVE_INTERVAL,
 } from './data';
+import type { ItemDef } from './data';
 import { BRUSHES, brushOf, CAMPS, findPath, isWall, lineClear, pushOut } from './terrain';
 import type { CampDef, MonsterType } from './terrain';
 import {
@@ -43,7 +51,7 @@ import type { Cmd, LobbyPlayer, Msg } from './net';
 import { ACCEPT_TIME, BOT_MMR, loadRating, mmAccept, mmActive, mmCancel, mmDecline, mmDone, mmQueue, rateResult, saveRating, tierOf } from './mm';
 import type { MatchInfo, Mode } from './mm';
 import type { BurstOpts, Particle } from './fx';
-import { beginDecals, canvas3d, endDecals, HK, K, loadModels, minimapCanvas, renderPortraits, renderWorld, resetUnits, syncUnits, unitHeight } from './world3d';
+import { beginDecals, canvas3d, endDecals, HK, K, loadModels, minimapCanvas, renderPortraits, renderWorld, resetUnits, setChampHue, syncUnits, unitHeight } from './world3d';
 import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Side, Team, Vec } from './data';
 import { KITS, setKitApi } from './kits';
 import type { KApi } from './kits/types';
@@ -117,6 +125,13 @@ interface Champ {
   wardCd: number;
   st: Record<string, any>; // per-kit state (stacks, timers, recast data)
   rc: number[]; // recast windows per slot (seconds left)
+  ms: MatchStats;
+  itemLog: [number, string][]; // [game second, item id] purchases
+  runes: RunePage;
+}
+export interface MatchStats {
+  pc: number; mc: number; tc: number; // damage to champions by type
+  obj: number; mon: number; taken: number; healed: number; gold: number; wards: number; ctrl: number; firstDeath: number;
 }
 interface Unit {
   id: number;
@@ -288,6 +303,7 @@ interface Game {
   projs: Proj[];
   pending: Pending[];
   kfx: KFx[];
+  tl: { t: number; g: [number, number]; d: [number, number]; k: [number, number] }[]; // 30s timeline samples
   zones: Zone[];
   camps: CampState[];
   drakes: [number, number];
@@ -503,8 +519,10 @@ function recalc(u: Unit) {
   let ms = d.ms;
   let haste = 0;
   let ls = 0;
+  let itemMp = 0;
   for (const id of c.items) {
     const it = ITEM_MAP[id];
+    itemMp += it.mp ?? 0;
     hp += it.hp ?? 0;
     ad += it.ad ?? 0;
     ap += it.ap ?? 0;
@@ -515,8 +533,21 @@ function recalc(u: Unit) {
     haste += it.haste ?? 0;
     ls += it.ls ?? 0;
   }
+  {
+    const rs = pageStats(c.runes);
+    hp += (rs.hp ?? 0) + (c.st.graspHp ?? 0);
+    ad += rs.ad ?? 0;
+    ap += rs.ap ?? 0;
+    armor += rs.armor ?? 0;
+    mr += rs.mr ?? 0;
+    asBonus += rs.as ?? 0;
+    ms += rs.ms ?? 0;
+    haste += rs.haste ?? 0;
+    ls += rs.ls ?? 0;
+    itemMp += rs.mp ?? 0;
+  }
   const oldMp = u.maxMp;
-  u.maxMp = d.mp + gr(d.mpL);
+  u.maxMp = d.mp + gr(d.mpL) + itemMp;
   // bonus stats (total minus base) feed the ability ratios
   c.st.baseAd = d.ad + gr(d.adL);
   c.st.baseArmor = d.armor + gr(d.armorL);
@@ -587,6 +618,9 @@ function makeChamp(def: ChampDef, team: Team, role: Role, isPlayer: boolean): Un
     wardCd: 0,
     st: {},
     rc: [0, 0, 0, 0],
+    ms: { pc: 0, mc: 0, tc: 0, obj: 0, mon: 0, taken: 0, healed: 0, gold: 0, wards: 0, ctrl: 0, firstDeath: 0 },
+    itemLog: [],
+    runes: isPlayer ? loadPage(def.id, def.tags ?? []) : defaultPage(def.tags ?? []),
   };
   u.maxHp = 0;
   recalc(u);
@@ -631,6 +665,10 @@ function botPick(role: Role, taken: Set<string>): ChampDef {
   const pool = fit.length ? fit : free.length ? free : CHAMPS;
   return pool[Math.floor(Math.random() * pool.length)];
 }
+interface DraftPlan { teams: [string[], string[]]; bans: string[] } // champion ids by position (ROLES order)
+let draftPlan: DraftPlan | null = null;
+let lastBans: string[] | null = null;
+const runeInfo = (k: string) => runeByKey(k);
 let soloRole: Role | 'fill' = 'mid';
 let soloSpell: 'auto' | 'heal' | 'smite' = 'auto'; // player's second summoner spell
 function newGame(champId: string, humans: Human[] = []) {
@@ -716,6 +754,7 @@ function newGame(champId: string, humans: Human[] = []) {
   remote.clear();
   const all: Human[] = humans.length ? humans : [{ peer: 'host', name: '', pick: champId, team: 0, role: soloRole }];
   const taken = new Set(all.map((h) => h.pick));
+  for (const b of draftPlan?.bans ?? []) taken.add(b);
   const slots: Unit[] = [];
   for (const team of [0, 1] as Team[]) {
     const side = all.filter((h) => (h.team ?? 0) === team);
@@ -732,7 +771,8 @@ function newGame(champId: string, humans: Human[] = []) {
         else remote.set(h.peer, u);
         units.push(u);
       } else {
-        const def = botPick(role, taken);
+        const planned = draftPlan && CHAMPS.find((c) => c.id === draftPlan!.teams[team][ROLES.indexOf(role)]);
+        const def = planned ?? botPick(role, taken);
         taken.add(def.id);
         units.push(makeChamp(def, team, role, false));
       }
@@ -747,6 +787,7 @@ function newGame(champId: string, humans: Human[] = []) {
     projs: [],
     pending: [],
     kfx: [],
+    tl: [],
     zones: [],
     camps: [],
     drakes: [0, 0],
@@ -764,7 +805,7 @@ function newGame(champId: string, humans: Human[] = []) {
     player,
     cam: { x: player.x, y: player.y },
     camLocked: true,
-    zoom: matchMedia('(pointer: coarse)').matches ? 0.7 : 0.62,
+    zoom: baseZoom(),
     marker: null,
     focus: null,
   };
@@ -866,6 +907,99 @@ function announce(text: string, tone: 'good' | 'bad' | 'neutral', sub = '') {
 let announceTimer = 0;
 
 type DmgFrom = 'attack' | 'spell' | 'dot';
+// ---- keystone runes (the simulated subset; see src/runes.ts) ----
+function runeOnDeal(src: Unit, t: Unit, dmg: number, type: DmgType, from: DmgFrom) {
+  const c = src.champ;
+  if (!c || src.dead || from === 'dot' || t.kind !== 'champ' || t.team === src.team) return;
+  const k = c.runes.keystone;
+  const st = c.st;
+  const now = G.t;
+  const L = c.level;
+  const lv = (a: number, b: number) => a + ((b - a) * (L - 1)) / 17;
+  const bonusAd = src.ad - (st.baseAd ?? src.ad);
+  const adType: DmgType = src.ap > bonusAd ? 'magic' : 'phys';
+  const rune = (amt: number, label: string) => {
+    dealDamage(src, t, amt, adType, 'dot');
+    local(() => addText(t.x, t.y - t.r - 30, label, '#ffe27a', 12));
+  };
+  const ready = (n: string, cd: number) => {
+    if ((st[n] ?? 0) > now) return false;
+    st[n] = now + cd;
+    return true;
+  };
+  const hits = (n: string, win: number, push = true) => {
+    const arr: { t: number; id: number }[] = (st[n] ?? []).filter((h: { t: number; id: number }) => now - h.t < win && h.id === t.id);
+    if (push) arr.push({ t: now, id: t.id });
+    st[n] = arr;
+    return arr.length;
+  };
+  switch (k) {
+    case 'Electrocute':
+      if (hits('elH', 3) >= 3 && ready('elCd', 25)) {
+        st.elH = [];
+        rune(lv(30, 180) + 0.4 * bonusAd + 0.25 * src.ap, 'Electrocute');
+      }
+      break;
+    case 'PressTheAttack':
+      if (from === 'attack' && hits('ptaH', 4) >= 3 && ready('ptaCd', 6)) {
+        st.ptaH = [];
+        rune(lv(40, 174), 'Press the Attack');
+        t.marks.pta = { t: 6, v: 0.08, src };
+      }
+      break;
+    case 'PhaseRush':
+      if (hits('prH', 3) >= 3 && ready('prCd', 15)) {
+        st.prH = [];
+        c.buffs.push({ as: 0, ms: 0.25, t: 3 });
+      }
+      break;
+    case 'FleetFootwork':
+      if (from === 'attack' && (st.ff = (st.ff ?? 0) + 1) >= 6) {
+        st.ff = 0;
+        heal(src, lv(10, 70) + 0.1 * bonusAd + 0.05 * src.ap);
+        c.buffs.push({ as: 0, ms: 0.2, t: 1 });
+      }
+      break;
+    case 'GraspOfTheUndying':
+      if (from === 'attack' && ready('grCd', 4)) {
+        dealDamage(src, t, src.maxHp * (c.def.ranged ? 0.02 : 0.04), 'magic', 'dot');
+        heal(src, src.maxHp * 0.02);
+        st.graspHp = (st.graspHp ?? 0) + 5;
+        src.maxHp += 5;
+      }
+      break;
+    case 'ArcaneComet':
+      if (from === 'spell' && ready('acCd', 12)) rune(lv(30, 100) + 0.2 * bonusAd + 0.15 * src.ap, 'Arcane Comet');
+      break;
+    case 'HailOfBlades':
+      if (from === 'attack' && ready('hobCd', 12)) c.buffs.push({ as: 1.0, ms: 0, t: 3 });
+      break;
+    case 'Conqueror': {
+      if (now > (st.conqT ?? 0)) st.conq = 0;
+      st.conqT = now + 5;
+      st.conq = Math.min(10, (st.conq ?? 0) + (from === 'attack' ? 2 : 1));
+      const extra = dmg * 0.012 * st.conq;
+      if (extra >= 1) dealDamage(src, t, extra, adType, 'dot');
+      if (st.conq >= 10) heal(src, extra * 0.08);
+      break;
+    }
+    case 'LethalTempo':
+      if (from === 'attack') {
+        st.ltT = now + 6;
+        if ((st.lt = Math.min(6, (st.lt ?? 0) + 1)) < 6) c.buffs.push({ as: 0.08, ms: 0, t: 6 });
+      }
+      break;
+    case 'DarkHarvest':
+      if (t.hp / t.maxHp < 0.5 && ready('dhCd', 40)) rune(lv(40, 100) + 0.25 * src.ap + 0.2 * bonusAd, 'Dark Harvest');
+      break;
+    case 'GlacialAugment':
+      if (from === 'attack' && ready('gaCd', 6)) {
+        t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, 0.3);
+        t.slowT = Math.max(t.slowT, 1.5);
+      }
+      break;
+  }
+}
 function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFrom = 'spell'): number {
   if (!targetable(t) || amt <= 0) return 0;
   if (t.kind === 'ward') amt = t.maxHp > 0 ? 1 : amt; // wards lose one health per hit, like the real game
@@ -874,6 +1008,8 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   if (type === 'phys' && t.shredT > 0) res *= 1 - t.shredPct;
   if (type === 'phys' && src.champ) res *= 1 - (KITS[src.champ.def.id]?.passive?.armorPen?.(src, t) ?? 0);
   if (t.drT > 0) amt *= 1 - t.drPct;
+  if (t.marks.pta && t.marks.pta.t > 0) amt *= 1 + t.marks.pta.v;
+  if (t.champ?.runes.keystone === 'Aftershock' && (t.stunT > 0 || t.rootT > 0)) amt *= 0.8;
   let mult = src.champ ? diffOf(src).dmg : 1;
   // Dragon: each drake the team owns adds 5% damage
   if (src.champ && src.team < 2) mult *= 1 + 0.05 * G.drakes[src.team as Team];
@@ -883,6 +1019,7 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   if (t.kind === 'minion' && colossusOn(t.team) && G.units.some((c) => c.champ && !c.dead && c.team === t.team && dist(c, t) < 900)) mult *= 0.6;
   const dmg = amt * mult * (100 / (100 + Math.max(0, res)));
   if (src.champ && dmg > 0) KITS[src.champ.def.id]?.passive?.onDealt?.(src, t, dmg, type, from);
+  if (src.champ && dmg > 0) runeOnDeal(src, t, dmg, type, from);
   if (dmg > 0 && from !== 'dot') {
     // Molten Shield: attackers are burned
     const rf = t.marks.reflect;
@@ -893,6 +1030,16 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
       delete t.marks.sun;
       dealDamage(sun.src, t, sun.v, 'magic', 'dot');
     }
+  }
+  {
+    const own = src.champ ? src : src.petOwner?.champ ? src.petOwner : null;
+    if (own) {
+      const m = own.champ!.ms;
+      if (t.kind === 'champ') m[type === 'phys' ? 'pc' : type === 'magic' ? 'mc' : 'tc'] += dmg;
+      else if (t.kind === 'tower' || t.kind === 'nexus') m.obj += dmg;
+      else if (t.kind === 'minion' || t.kind === 'monster') m.mon += dmg;
+    }
+    if (t.champ) t.champ.ms.taken += dmg;
   }
   const soak = Math.min(t.shield, dmg);
   t.shield -= soak;
@@ -938,7 +1085,9 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
 }
 
 function heal(u: Unit, amt: number) {
+  const before = u.hp;
   u.hp = Math.min(u.maxHp, u.hp + amt);
+  if (u.champ) u.champ.ms.healed += Math.max(0, u.hp - before);
 }
 
 // ---------- ability ranks: one point per level; basics cap at ceil(level/2), R at 6/11/16 ----------
@@ -1002,6 +1151,7 @@ const xpNeed = (lvl: number) => 180 + lvl * 100;
 function giveGold(u: Unit, amt: number) {
   amt = Math.round(amt * diffOf(u).gold);
   u.champ!.gold += amt;
+  u.champ!.ms.gold += amt;
   if (u === G.player) local(() => addText(u.x, u.y - 50, `+${amt}g`, '#ffd700', 14));
 }
 
@@ -1296,6 +1446,7 @@ function towerCovering(p: Vec, towerTeam: Side, pad = 0): Unit | null {
 // ================= abilities =================
 function abilityDamage(u: Unit, a: AbilityDef, slot: number): number {
   const rank = Math.max(1, u.champ!.ranks[slot]);
+  if (a.perRank) return a.base + a.perLvl * (rank - 1) + a.adR * u.ad + a.apR * u.ap;
   return (a.base + a.perLvl * (u.champ!.level - 1)) * rankMul(slot, rank) + a.adR * u.ad + a.apR * u.ap;
 }
 
@@ -2088,13 +2239,28 @@ function runOrder(u: Unit, dt: number) {
 
 function aiShop(u: Unit) {
   const c = u.champ!;
-  while (c.buildIdx < c.def.build.length && c.items.length < 6) {
-    const it = ITEM_MAP[c.def.build[c.buildIdx]];
-    if (c.gold < it.cost) break;
-    c.gold -= it.cost;
-    c.items.push(it.id);
-    c.buildIdx++;
-    recalc(u);
+  let guard = 12;
+  while (c.buildIdx < c.def.build.length && guard-- > 0) {
+    const target = c.def.build[c.buildIdx];
+    if (c.items.includes(target)) {
+      c.buildIdx++;
+      continue;
+    }
+    if (c.items.length >= 6 && !quote(target, c.items, ITEM_MAP).consumed.length) break;
+    if (canBuy(u, target)) {
+      buyItem(u, target);
+      c.buildIdx++;
+      continue;
+    }
+    // can't afford the whole item: buy the most expensive affordable component, like a player would
+    const comps = (function walk(id: string): string[] {
+      const it = ITEM_MAP[id];
+      return (it?.from ?? []).flatMap((f) => [f, ...walk(f)]);
+    })(target)
+      .filter((f) => ITEM_MAP[f] && canBuy(u, f))
+      .sort((x, y) => ITEM_MAP[y].cost - ITEM_MAP[x].cost);
+    if (!comps.length) break;
+    buyItem(u, comps[0]);
   }
 }
 
@@ -2676,6 +2842,8 @@ function placeWard(u: Unit, x: number, y: number, pink = false): boolean {
   w.stealthT = pink ? 0 : 1;
   w.target = u; // owner
   G.units.push(w);
+  c.ms.wards++;
+  if (pink) c.ms.ctrl++;
   if (pink) c.pinks--;
   else {
     c.wards--;
@@ -2692,6 +2860,15 @@ function update(dt: number) {
     return;
   }
   G.t += dt;
+  if (G.t >= (G.tl.length + 1) * 30) {
+    const g: [number, number] = [0, 0];
+    const d: [number, number] = [0, 0];
+    for (const u of G.units) if (u.champ && u.team < 2) {
+      g[u.team as 0 | 1] += u.champ.ms.gold;
+      d[u.team as 0 | 1] += u.champ.ms.pc + u.champ.ms.mc + u.champ.ms.tc;
+    }
+    G.tl.push({ t: G.tl.length * 30 + 30, g, d, k: [G.kills[0], G.kills[1]] });
+  }
   refreshOpenStructures();
   if (G.t >= G.nextWave) {
     spawnWave();
@@ -2711,6 +2888,7 @@ function update(dt: number) {
   for (const u of G.units) {
     if (u.champ) {
       u.champ.gold += 2 * dt * diffOf(u).gold;
+      u.champ.ms.gold += 2 * dt * diffOf(u).gold;
       if (u.dead) {
         u.champ.respawnT -= dt;
         if (u.champ.respawnT <= 0) {
@@ -2962,7 +3140,7 @@ function applyPortraits() {
   document.querySelectorAll<HTMLElement>('.champ').forEach((el) => {
     const img = PORTRAITS[el.dataset.id ?? ''];
     const orb = el.querySelector<HTMLElement>('.orb');
-    if (img && orb) {
+    if (img && orb && !orb.querySelector('img')) {
       // inline shorthand from buildMenu resets size/position, so set them inline too
       orb.style.backgroundImage = `url(${img})`;
       orb.style.backgroundSize = '104%';
@@ -2975,7 +3153,7 @@ function applyPortraits() {
 }
 function paintPortrait() {
   const c = G.player.champ!;
-  const img = PORTRAITS[c.def.id];
+  const img = `${import.meta.env.BASE_URL}img/champ/${c.def.key ?? c.def.id}.png`;
   const portrait = $('portrait');
   portrait.style.background = img ? `url(${img}) center 40% / 104% no-repeat, radial-gradient(circle at 50% 35%, ${c.def.color}, #0b0f14 80%)` : c.def.color;
   $('pinit').textContent = img ? '' : c.def.name[0];
@@ -3606,7 +3784,7 @@ function updateHud() {
   const fresh = performance.now() - lastBuyAt < 400 ? c.items.length - 1 : -1;
   const invHtml = Array.from(
     { length: 6 },
-    (_, i) => `<div class="${c.items[i] ? 'full' : ''}${i === fresh ? ' new' : ''}">${c.items[i] ? ITEM_MAP[c.items[i]].name : ''}</div>`,
+    (_, i) => `<div title="${c.items[i] ? ITEM_MAP[c.items[i]].name : ''}" class="${c.items[i] ? 'full' : ''}${i === fresh ? ' new' : ''}">${c.items[i] ? itemImg(ITEM_MAP[c.items[i]]) : ''}</div>`,
   ).join('');
   if (hudCache.get('inv') !== invHtml) {
     hudCache.set('inv', invHtml);
@@ -3637,20 +3815,40 @@ function feedMsg(text: string, team: Side | -1) {
 
 // ================= shop =================
 const canShop = () => G.player.dead || dist(G.player, BASES[0]) < FOUNTAIN_R + 60;
+let shopTab = 'rec';
+const SHOP_TABS: [string, string, (i: ItemDef, c: Champ) => boolean][] = [
+  ['rec', 'Recommended', (i, c) => c.def.build.includes(i.id) || (i.into ?? []).some((x) => c.def.build.includes(x)) || (i.into ?? []).some((x) => (ITEM_MAP[x]?.into ?? []).some((y) => c.def.build.includes(y)))],
+  ['atk', 'Attack', (i) => !!(i.ad || i.as || i.ls)],
+  ['mag', 'Magic', (i) => !!(i.ap || i.mp)],
+  ['def', 'Defense', (i) => !!(i.hp || i.armor || i.mr)],
+  ['boot', 'Boots', (i) => !!i.boots],
+  ['all', 'All', () => true],
+];
+const itemImg = (it: ItemDef) => (it.icon ? `<img class="ico" src="${iconUrl(it)}" alt="" loading="lazy" draggable="false">` : '<span class="ico ward"></span>');
 function renderShop() {
   const c = G.player.champ!;
   const ok = canShop();
   const note = ok
     ? c.items.length >= 6
-      ? 'Inventory full.'
-      : 'Click an item to buy it.'
+      ? 'Inventory full — buying a completed item with owned components still works.'
+      : 'Tap an item to buy it. Owned components are used up and lower the price.'
     : 'You can only buy items while in your fountain (press B to recall).';
-  const html = ITEMS.map(
-    (it) =>
-      `<button class="item" data-id="${it.id}" ${!ok || c.gold < it.cost || (it.consumable ? c.pinks >= 2 : c.items.length >= 6) || (it.unique && c.items.includes(it.id)) ? 'disabled' : ''}><span class="cost">${it.cost}</span><b>${it.name}</b><small>${it.desc}</small></button>`,
-  ).join('');
-  if (hudCache.get('shop') !== html + note) {
-    hudCache.set('shop', html + note);
+  const tab = SHOP_TABS.find((t) => t[0] === shopTab) ?? SHOP_TABS[0];
+  const list = ITEMS.filter((it) => it.consumable || tab[2](it, c));
+  const rec = new Set(c.def.build);
+  const html =
+    `<div class="stabs">${SHOP_TABS.map((t) => `<button data-tab="${t[0]}" class="${t[0] === shopTab ? 'on' : ''}">${t[1]}</button>`).join('')}</div>` +
+    list
+      .sort((x, y) => (rec.has(y.id) ? 1 : 0) - (rec.has(x.id) ? 1 : 0) || x.cost - y.cost)
+      .map((it) => {
+        const q = it.consumable ? { cost: it.cost } : quote(it.id, c.items, ITEM_MAP);
+        const off = !canBuy(G.player, it.id);
+        const own = c.items.includes(it.id);
+        return `<button class="item${rec.has(it.id) ? ' rec' : ''}${own ? ' own' : ''}" data-id="${it.id}" ${off ? 'disabled' : ''}>${itemImg(it)}<span class="cost">${q.cost}${q.cost !== it.cost ? `<s>${it.cost}</s>` : ''}</span><b>${it.name}</b><small>${it.desc}</small></button>`;
+      })
+      .join('');
+  if (hudCache.get('shop') !== html + note + c.gold) {
+    hudCache.set('shop', html + note + c.gold);
     $('shopnote').textContent = note;
     $('shopgrid').innerHTML = html;
   }
@@ -3669,23 +3867,44 @@ function canBuy(u: Unit, id: string): boolean {
   const it = ITEM_MAP[id];
   const c = u.champ!;
   const inShop = u.dead || dist(u, BASES[u.team]) < FOUNTAIN_R + 60;
-  if (it?.consumable) return inShop && c.gold >= it.cost && c.pinks < 2;
-  return !!it && inShop && c.gold >= it.cost && c.items.length < 6 && !(it.unique && c.items.includes(it.id));
+  if (!it || !inShop) return false;
+  if (it.consumable) return c.gold >= it.cost && c.pinks < 2;
+  const q = quote(id, c.items, ITEM_MAP);
+  if (c.gold < q.cost) return false;
+  if (c.items.length - q.consumed.length >= 6) return false;
+  if (c.items.includes(id) && it.unique) return false;
+  if (it.boots) {
+    const left = c.items.filter((x, i) => !q.consumed.includes(i));
+    if (left.some((x) => ITEM_MAP[x]?.boots)) return false;
+  }
+  return true;
 }
 function buyItem(u: Unit, id: string) {
   if (!canBuy(u, id)) return;
   const c = u.champ!;
-  c.gold -= ITEM_MAP[id].cost;
-  if (ITEM_MAP[id].consumable) {
+  const it = ITEM_MAP[id];
+  if (it.consumable) {
+    c.gold -= it.cost;
     c.pinks++;
     return;
   }
+  const q = quote(id, c.items, ITEM_MAP);
+  c.gold -= q.cost;
+  c.items = c.items.filter((_, i) => !q.consumed.includes(i));
   c.items.push(id);
+  c.itemLog.push([Math.round(G.t), id]);
   recalc(u);
 }
 $('shopgrid').addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest('button');
-  if (!btn || btn.disabled) return;
+  const tabBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
+  if (tabBtn) {
+    shopTab = tabBtn.dataset.tab!;
+    hudCache.delete('shop');
+    renderShop();
+    return;
+  }
+  if (!btn || btn.disabled || !btn.dataset.id) return;
   if (!canBuy(G.player, btn.dataset.id!)) return;
   command({ c: 'buy', item: btn.dataset.id! });
   lastBuyAt = performance.now();
@@ -3739,7 +3958,7 @@ canvas.addEventListener(
   (e) => {
     if (!running) return;
     e.preventDefault();
-    G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.4, 1.3);
+    G.zoom = clampZoom(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1));
   },
   { passive: false },
 );
@@ -3834,6 +4053,45 @@ function edgePan(dt: number) {
 const TOUCH = matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch');
 if (TOUCH) document.body.classList.add('touch');
 
+// Zoom: the default view is as far out as you can go (like the real game); pinch / wheel zooms in.
+const baseZoom = () => (TOUCH ? clamp(Math.max(W, H) / 1500, 0.45, 0.8) : 0.62);
+const ZOOM_IN = 2.4;
+const clampZoom = (z: number) => clamp(z, baseZoom(), baseZoom() * ZOOM_IN);
+{
+  let startD = 0;
+  let startZ = 1;
+  const isField = (t: EventTarget | null) => t === canvas || t === canvas3d || t === joyzone || (t as HTMLElement | null)?.id === 'vignette';
+  const dist2 = (a: Touch, b: Touch) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  document.addEventListener(
+    'touchstart',
+    (e) => {
+      if (!running || !G || e.touches.length !== 2) return;
+      if (!isField(e.touches[0].target) || !isField(e.touches[1].target)) return;
+      joyStop();
+      startD = dist2(e.touches[0], e.touches[1]);
+      startZ = G.zoom;
+    },
+    { passive: true, capture: true },
+  );
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      if (e.touches.length === 2 && startD > 0 && running && G) {
+        e.preventDefault();
+        G.zoom = clampZoom((startZ * dist2(e.touches[0], e.touches[1])) / startD);
+      }
+    },
+    { passive: false, capture: true },
+  );
+  const stop = (e: TouchEvent) => {
+    if (e.touches.length < 2) startD = 0;
+  };
+  document.addEventListener('touchend', stop, { capture: true });
+  document.addEventListener('touchcancel', stop, { capture: true });
+  // Safari fires its own page-zoom gestures; the game owns pinch
+  for (const g of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(g, (e) => e.preventDefault(), { passive: false } as AddEventListenerOptions);
+  document.addEventListener('dblclick', (e) => { if (running) e.preventDefault(); });
+}
 const AIM_DEAD = 16; // px of drag before a press becomes an aimed cast
 const AIM_MAX = 80; // px of drag that maps to full range
 const joy = { id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
@@ -4346,7 +4604,10 @@ $('mward').addEventListener('click', () => {
   const pink = P.champ!.wards <= 0 && P.champ!.pinks > 0; // out of trinket charges: drop a Control Ward
   command({ c: 'ward', x: P.x + facing.x * 400, y: P.y + facing.y * 400, pink });
 });
-window.addEventListener('resize', () => TOUCH && G && layoutTouch());
+window.addEventListener('resize', () => {
+  if (G) G.zoom = clampZoom(G.zoom);
+  if (TOUCH && G) layoutTouch();
+});
 
 // ================= multiplayer: commands, snapshots, lobby =================
 const remote = new Map<string, Unit>(); // host: each guest's champion
@@ -4611,8 +4872,8 @@ function applySnap(s: Snap) {
     if (!me) return;
     awaitingYou = 0;
     G = {
-      t: s.t, units, projs: [], pending: [], kfx: [], zones: [], camps: [], drakes: [0, 0], colossus: [0, 0], seen: [new Set(), new Set()], visionT: 0, platesGone: false, fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
-      open: new Set(), player: me, cam: { x: me.x, y: me.y }, camLocked: true, zoom: TOUCH ? 0.7 : 0.62, marker: null, focus: null,
+      t: s.t, units, projs: [], pending: [], kfx: [], tl: [], zones: [], camps: [], drakes: [0, 0], colossus: [0, 0], seen: [new Set(), new Set()], visionT: 0, platesGone: false, fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
+      open: new Set(), player: me, cam: { x: me.x, y: me.y }, camLocked: true, zoom: baseZoom(), marker: null, focus: null,
     };
     buildHud();
     enterMatch();
@@ -5373,7 +5634,7 @@ function buildMenu() {
   tabs.innerHTML = CLASSES.map((k) => `<button data-k="${k}" class="${k === champFilter ? 'on' : ''}">${k}</button>`).join('');
   wrap.innerHTML = CHAMPS.map(
     (c, i) => `<button class="champ" data-id="${c.id}" data-tags="${(c.tags ?? []).join(' ')}" style="--i:${i}" title="${c.name}, ${c.role}"><div class="core">
-      <div class="orb" style="background:${c.color};--glow:${c.color}">${c.name[0]}</div>
+      <div class="orb img" style="background:${c.color};--glow:${c.color}"><img src="${import.meta.env.BASE_URL}img/champ/${c.key ?? c.id}.png" alt="" loading="lazy" draggable="false"></div>
       <h3>${c.name}</h3><div class="role">${c.role}</div>
     </div></button>`,
   ).join('');
@@ -5400,7 +5661,7 @@ function buildMenu() {
     wrap.querySelectorAll('.champ').forEach((el) => el.classList.toggle('sel', el === b));
     const play = $<HTMLButtonElement>('play');
     play.disabled = false;
-    play.textContent = 'Play';
+    play.textContent = 'Champion Select';
   });
 }
 function start() {
@@ -5414,11 +5675,9 @@ function start() {
 function enterMatch() {
   demoMode = false;
   if (TOUCH) {
-    G.zoom = clamp(Math.min(W, H) / 900, 0.45, 0.8);
+    G.zoom = baseZoom();
     try {
-      void document.documentElement.requestFullscreen?.().then(() =>
-        (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => {}),
-      ).catch(() => {});
+      void document.documentElement.requestFullscreen?.().catch(() => {});
     } catch {
       // fullscreen not supported (e.g. iOS Safari); play in the browser window
     }
@@ -5429,7 +5688,34 @@ function enterMatch() {
   running = true;
   audio.gameplay = true;
 }
-$('play').addEventListener('click', start);
+function openChampSelect() {
+  sfx('click');
+  openDraft({
+    champs: CHAMPS,
+    role: soloRole,
+    spell: soloSpell,
+    sfx: (n) => sfx(n as Parameters<typeof sfx>[0]),
+    onCancel: () => {},
+    onDone: (r) => {
+      soloRole = r.role;
+      soloSpell = r.spell;
+      try {
+        localStorage.setItem('rift-spell', soloSpell);
+      } catch {
+        // storage unavailable
+      }
+      draftPlan = { teams: [r.blue, r.red], bans: r.bans };
+      lastBans = r.bans;
+      picked = r.pick;
+      demoMode = false;
+      $('feed').innerHTML = '';
+      newGame(r.pick);
+      draftPlan = null;
+      enterMatch();
+    },
+  });
+}
+$('play').addEventListener('click', openChampSelect);
 function backToMenu() {
   $('end').classList.add('hidden');
   $('hud').classList.add('hidden');
@@ -5444,17 +5730,71 @@ function backToMenu() {
 $('again').addEventListener('click', backToMenu);
 function showEnd() {
   const won = G.over === G.player.team;
-  const c = G.player.champ!;
-  $('endtitle').textContent = won ? 'VICTORY' : 'DEFEAT';
-  $('endtitle').style.color = won ? '#c8aa6e' : '#ff5a5a';
-  const rated = rateMatch(won);
-  $('endstats').innerHTML = `${rated}<br/>${c.def.name} · Level ${c.level} · ${difficulty.name}<br/>K/D/A ${c.kills} / ${c.deaths} / ${c.assists} · CS ${c.cs}<br/>Game time ${fmtTime(G.t)} · Team kills ${G.kills[0]} – ${G.kills[1]}`;
+  const base = import.meta.env.BASE_URL;
+  const players = G.units
+    .filter((u) => u.champ && u.team < 2)
+    .map((u) => {
+      const c = u.champ!;
+      const rune = runeInfo(c.runes.keystone);
+      return {
+        name: u.name, champ: c.def.name, icon: `${base}img/champ/${c.def.key ?? c.def.id}.png`, team: u.team as 0 | 1, level: c.level, kills: c.kills, deaths: c.deaths, assists: c.assists, cs: c.cs,
+        gold: Math.round(c.ms.gold), pc: c.ms.pc, mc: c.ms.mc, tc: c.ms.tc, obj: c.ms.obj, mon: c.ms.mon, taken: c.ms.taken, healed: c.ms.healed, wards: c.ms.wards, ctrl: c.ms.ctrl,
+        items: [...new Set([...c.items, ...c.itemLog.map((l) => l[1])])].map((id) => ({ id, name: ITEM_MAP[id]?.name ?? id, icon: ITEM_MAP[id] ? iconUrl(ITEM_MAP[id]) : '' })),
+        itemLog: c.itemLog, icons: Object.fromEntries(c.itemLog.map(([, id]) => [id, ITEM_MAP[id] ? iconUrl(ITEM_MAP[id]) : ''])), me: u === G.player, keystone: rune?.name ?? '', keystoneIcon: rune ? runeIcon(rune.icon) : '',
+      };
+    });
+  for (const p of players) p.items = p.items.filter((i) => players.length && (G.units.find((u) => u.champ && u.champ.def.name === p.champ && u.team === p.team)?.champ?.items ?? []).includes(i.id));
+  const towers: [number, number] = [0, 0];
+  for (const u of G.units) if (u.kind === 'tower' && u.dead && u.team < 2 && u.tier !== T_INHIB) towers[1 - u.team]++;
+  const data: PostData = {
+    won, time: fmtTime(G.t), seconds: G.t, kills: [G.kills[0], G.kills[1]], mode: `Summoner's Rift · ${difficulty.name}`, rating: rateMatch(won).replace(/<[^>]+>/g, ''),
+    bans: (lastBans ?? []).map((id) => {
+      const d = CHAMPS.find((x) => x.id === id);
+      return { icon: `${base}img/champ/${d?.key ?? id}.png`, name: d?.name ?? id };
+    }),
+    players, tl: G.tl, towers,
+  };
+  $('endstats').innerHTML = renderPost(data);
+  $('end').scrollTop = 0;
+  $('endstats').querySelectorAll<HTMLElement>('.ptabs button').forEach((b) =>
+    b.addEventListener('click', () => {
+      $('endstats').querySelectorAll('.ptabs button').forEach((x) => x.classList.toggle('on', x === b));
+      $('endstats').querySelectorAll<HTMLElement>('.pp').forEach((x) => x.classList.toggle('on', x.dataset.p === b.dataset.t));
+    }),
+  );
+  $('endtitle').textContent = '';
+  $('hud').classList.add('hidden');
   toggleShop(false);
   $('end').classList.remove('hidden');
   running = false;
   audio.gameplay = false;
   sfx(won ? 'victory' : 'defeat');
 }
+// tint each champion's body with the dominant colour of their icon
+function loadChampHues() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 12;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  if (!cx) return;
+  for (const c of CHAMPS) {
+    const im = new Image();
+    im.onload = () => {
+      cx.clearRect(0, 0, 12, 12);
+      cx.drawImage(im, 0, 0, 12, 12);
+      const d = cx.getImageData(0, 0, 12, 12).data;
+      let r = 0, g = 0, b = 0, w = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const mx = Math.max(d[i], d[i + 1], d[i + 2]);
+        const sat = mx - Math.min(d[i], d[i + 1], d[i + 2]);
+        const wt = 1 + sat / 40;
+        r += d[i] * wt; g += d[i + 1] * wt; b += d[i + 2] * wt; w += wt;
+      }
+      setChampHue(c.id, '#' + [r, g, b].map((v) => Math.round(v / w).toString(16).padStart(2, '0')).join(''));
+    };
+    im.src = `${import.meta.env.BASE_URL}img/champ/${c.key ?? c.id}.png`;
+  }
+}
+loadChampHues();
 buildMenu();
 buildDifficulty();
 buildMotionToggle();
@@ -5563,5 +5903,5 @@ Object.assign(window, {
 
 // dev-only handle for smoke-testing champion kits from the console
 if (import.meta.env.DEV) {
-  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp, isWall, placeWard, CAMPS };
+  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp, isWall, placeWard, CAMPS, dealDamage, kill };
 }

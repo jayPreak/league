@@ -3,6 +3,8 @@
 // AI hints live in ROSTER below; behaviour lives in src/kits.
 import type { AbilityDef, AbilityKind, AimShape, ChampDef } from '../data';
 import { REF } from './ref';
+import generic from './generic.json';
+import { recommend } from '../items';
 
 interface AbilityHint {
   kind: AbilityKind; // nearest generic kind, used by bot AI and the aim indicator only
@@ -105,7 +107,7 @@ export const plain = (t: string) =>
     .trim();
 
 export function buildRoster(): ChampDef[] {
-  return ROSTER.map((r) => {
+  const scripted = ROSTER.map((r) => {
     const ref = REF[r.id];
     if (!ref) throw new Error(`champion data missing: ${r.id}`);
     const st = ref.stats;
@@ -145,6 +147,7 @@ export function buildRoster(): ChampDef[] {
     });
     return {
       id: r.id,
+      key: ref.id,
       name: ref.name,
       title: ref.title.replace(/^./, (c) => c.toUpperCase()),
       role: ref.tags.join(' / '),
@@ -173,7 +176,44 @@ export function buildRoster(): ChampDef[] {
       passive: { name: ref.passive.name, desc: plain(ref.passive.description) },
       wiki: ref.version,
       abilities,
-      build: r.build,
+      build: recommend(ref.tags),
     };
+  });
+  return [...scripted, ...buildGeneric()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ---------- the rest of the roster ----------
+// Champions without a hand-written kit (src/kits) run on the generic ability engine. Their stats, text,
+// cooldowns, costs and ranges are exact; damage numbers come from the CommunityDragon calculations;
+// the ability *shape* (skillshot / ground target / dash / self nova) is inferred, so those kits are approximations.
+const CLASS_COLOR: Record<string, string> = { Mage: '#a86bff', Marksman: '#ffd24a', Fighter: '#e08a3a', Tank: '#6fa8ff', Assassin: '#ff4a6a', Support: '#7fe3b0' };
+interface GenSpell {
+  name: string; desc: string; kind: AbilityKind; cds: number[]; costs: number[]; ranges: number[]; costType: string; range: number;
+  base: number; perLvl: number; adR: number; apR: number; dmgType: 'phys' | 'magic' | 'true';
+  speed?: number; width?: number; radius?: number; selfCenter?: boolean; aim: AimShape; stun?: number; slow?: number; root?: number; knockup?: number;
+}
+interface GenChamp {
+  id: string; key: string; name: string; title: string; tags: string[]; resource: string;
+  stats: RefStats; passive: { name: string; desc: string }; spells: GenSpell[];
+}
+type RefStats = (typeof REF)[string]['stats'];
+function buildGeneric(): ChampDef[] {
+  return (generic as unknown as GenChamp[]).map((g) => {
+    const st = g.stats;
+    const color = CLASS_COLOR[g.tags[0]] ?? '#c8aa6e';
+    const abilities: AbilityDef[] = g.spells.map((sp) => ({
+      name: sp.name, desc: sp.desc, kind: sp.kind, cd: sp.cds[0] ?? 8, cds: sp.cds, cost: sp.costs[0] ?? 0, costs: sp.costs, costType: sp.costType,
+      range: sp.range, ranges: sp.ranges, base: sp.base > 1500 ? 0 : sp.base, perLvl: sp.base > 1500 ? 0 : sp.perLvl, adR: sp.adR, apR: sp.apR, dmgType: sp.dmgType, perRank: true,
+      color, width: sp.width, speed: sp.speed, radius: sp.radius, selfCenter: sp.selfCenter, aim: sp.aim,
+      stun: sp.stun, slow: sp.slow, slowT: sp.slow ? 1.5 : undefined, root: sp.root, knockup: sp.knockup,
+    }));
+    return {
+      id: g.id, name: g.name, title: g.title.replace(/^./, (c) => c.toUpperCase()), role: g.tags.join(' / '), tags: g.tags, color,
+      hp: st.hp, hpL: st.hpperlevel, ad: st.attackdamage, adL: st.attackdamageperlevel, armor: st.armor, armorL: st.armorperlevel,
+      mr: st.spellblock, mrL: st.spellblockperlevel, range: st.attackrange, as: st.attackspeed, asL: st.attackspeedperlevel / 100, ms: st.movespeed,
+      ranged: st.attackrange > 200, mp: st.mp, mpL: st.mpperlevel, mpRegen: st.mpregen / 5, mpRegenL: st.mpregenperlevel / 5,
+      hpRegen: st.hpregen, hpRegenL: st.hpregenperlevel, resource: g.resource, passive: g.passive, wiki: '16.22.1', approx: true, key: g.key,
+      abilities, build: recommend(g.tags),
+    } as ChampDef;
   });
 }

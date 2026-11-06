@@ -1,4 +1,5 @@
 import { buildRoster } from './champions';
+import { ALL_ITEMS } from './items';
 export type Team = 0 | 1;
 export type Side = 0 | 1 | 2; // 2 = neutral (jungle monsters)
 export type DmgType = 'phys' | 'magic' | 'true';
@@ -58,6 +59,7 @@ export interface AbilityDef {
   ranges?: number[]; // cast range per rank
   costType?: string; // 'Mana', 'Energy', 'No Cost', 'Generates 1 Ferocity', ...
   aim?: AimShape; // what the hold-to-aim indicator draws
+  perRank?: boolean; // base/perLvl scale with the ability rank instead of champion level
 }
 // line: skillshot rectangle (w wide, reach long); circle: ground target of radius r within reach;
 // cone: wedge of `deg` degrees; self: ring of radius r around the caster; target: a unit within reach; none: nothing
@@ -101,6 +103,8 @@ export interface ChampDef {
   mpRegenL?: number;
   passive?: { name: string; desc: string };
   wiki?: string; // Data Dragon version the numbers were taken from
+  approx?: boolean; // generic-engine kit: exact stats/text, inferred ability behaviour
+  key?: string; // Data Dragon id used for icons
 }
 
 export interface ItemDef {
@@ -119,6 +123,13 @@ export interface ItemDef {
   ls?: number;
   unique?: boolean;
   consumable?: boolean; // bought into a counter instead of an inventory slot
+  mp?: number;
+  boots?: boolean; // only one pair of boots
+  tags?: string[];
+  from?: string[]; // recipe components
+  into?: string[];
+  icon?: string; // Data Dragon item id for the icon
+  depth?: number;
 }
 
 // ---------- map ----------
@@ -159,21 +170,8 @@ export const FIRST_WAVE = 20; // first wave leaves the nexus at 0:20
 export const CHAMPS: ChampDef[] = buildRoster();
 
 // ---------- items ----------
-export const ITEMS: ItemDef[] = [
-  { id: 'pink', name: 'Control Ward', cost: 75, desc: 'Press 5: a visible ward that never expires and reveals hidden wards. Hold 1.', consumable: true },
-  { id: 'sword', name: 'Iron Blade', cost: 350, desc: '+10 AD', ad: 10 },
-  { id: 'tome', name: 'Spell Tome', cost: 435, desc: '+20 AP', ap: 20 },
-  { id: 'gem', name: 'Heart Gem', cost: 400, desc: '+150 HP', hp: 150 },
-  { id: 'vest', name: 'Chain Vest', cost: 300, desc: '+15 Armor', armor: 15 },
-  { id: 'cloak', name: 'Null Cloak', cost: 450, desc: '+25 MR', mr: 25 },
-  { id: 'dagger', name: 'Quick Dagger', cost: 300, desc: '+12% AS', as: 0.12 },
-  { id: 'boots', name: 'Swift Boots', cost: 300, desc: '+45 Move Speed (one only)', ms: 45, unique: true },
-  { id: 'blade', name: 'Ruinblade', cost: 3000, desc: '+50 AD, +25% AS, 12% lifesteal', ad: 50, as: 0.25, ls: 0.12 },
-  { id: 'edge', name: 'Void Edge', cost: 2900, desc: '+60 AD, +20 ability haste', ad: 60, haste: 20 },
-  { id: 'bow', name: 'Storm Bow', cost: 2700, desc: '+35 AD, +45% AS, +25 MS', ad: 35, as: 0.45, ms: 25 },
-  { id: 'crown', name: 'Archmage Crown', cost: 3000, desc: '+110 AP, +250 HP, +20 haste', ap: 110, hp: 250, haste: 20 },
-  { id: 'plate', name: 'Titan Plate', cost: 2800, desc: '+450 HP, +45 Armor, +35 MR', hp: 450, armor: 45, mr: 35 },
-];
+// Real Summoner's Rift shop from Data Dragon: see src/items.ts.
+export const ITEMS: ItemDef[] = ALL_ITEMS;
 export const ITEM_MAP: Record<string, ItemDef> = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 
 // ---------- difficulty (applies to the Red team only) ----------

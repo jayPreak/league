@@ -37,7 +37,7 @@ export interface WUnit {
   tier: number;
   act: string;
   actN: number;
-  champ: { def: { id: string; ranged: boolean }; dash: unknown; recallT: number } | null;
+  champ: { def: { id: string; ranged: boolean; tags?: string[]; color: string; hp?: number }; dash: unknown; recallT: number } | null;
   airT?: number;
   stealthT?: number;
   monster?: string | null;
@@ -512,6 +512,32 @@ const CHAMP_SIZE: Record<string, number> = {
   malphite: 1.4, blitzcrank: 1.35, garen: 1.1, darius: 1.12, rengar: 1.05, leona: 1.05, monkeyking: 0.9, masteryi: 0.95,
   annie: 0.78, yuumi: 0.62, twitch: 0.82, jinx: 0.9, ezreal: 0.95, lux: 0.95, naafiri: 0.88, ahri: 0.95,
 };
+// Champions without a hand-picked body get one from their class, tinted with the dominant colour of their
+// Data Dragon icon so the roster reads as different characters. (Riot's models are not available.)
+const HUES: Record<string, string> = {};
+export const setChampHue = (id: string, c: string) => { HUES[id] = c; };
+const dyn = new Map<string, HeroCfg>();
+interface ChampLike { id: string; tags?: string[]; ranged: boolean; color: string; hp?: number }
+function heroFor(def: ChampLike): HeroCfg {
+  const fixed = HEROES[def.id];
+  const hue = HUES[def.id] ?? fixed?.hue ?? def.color;
+  const key = def.id + hue;
+  const hit = dyn.get(key);
+  if (hit) return hit;
+  const t = def.tags?.[0] ?? 'Fighter';
+  const t2 = def.tags?.[1];
+  let cfg: HeroCfg;
+  if (fixed) cfg = { ...fixed, hue };
+  else if (t === 'Mage' || (t === 'Support' && def.ranged && t2 !== 'Tank')) cfg = hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], hue);
+  else if (t === 'Marksman') cfg = hero('Rogue_Hooded', ['1H_Crossbow', 'Knife_Offhand'], '1H_Ranged_Shoot', ['1H_Ranged_Shoot', 'Dodge_Forward', 'Throw', '2H_Ranged_Shoot'], hue);
+  else if (t === 'Assassin') cfg = hero(t2 === 'Fighter' ? 'Rogue_Hooded' : 'Rogue', ['Knife', 'Knife_Offhand'], MELEE[0], ['Dodge_Forward', 'Throw', 'Spellcast_Raise', '2H_Melee_Attack_Spin'], hue);
+  else if (t === 'Tank' || t2 === 'Tank') cfg = hero('Knight', ['1H_Sword', 'Round_Shield'], MELEE[0], ['Cheer', 'Throw', 'Dodge_Forward', '2H_Melee_Attack_Spin'], hue);
+  else if (t === 'Support') cfg = hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Long'], hue);
+  else cfg = hero(def.ranged ? 'Rogue_Hooded' : (def.hp ?? 600) > 620 ? 'Barbarian' : 'Knight', def.ranged ? ['1H_Crossbow'] : (def.hp ?? 600) > 620 ? ['2H_Axe'] : ['2H_Sword'], def.ranged ? '1H_Ranged_Shoot' : '2H_Melee_Attack_Chop', ['2H_Melee_Attack_Chop', 'Dodge_Forward', 'Cheer', '2H_Melee_Attack_Spin'], hue);
+  dyn.set(key, cfg);
+  return cfg;
+}
+const classSize = (def: ChampLike) => CHAMP_SIZE[def.id] ?? ({ Tank: 1.15, Fighter: 1.05, Marksman: 0.92, Mage: 0.95, Assassin: 0.95, Support: 0.9 } as Record<string, number>)[def.tags?.[0] ?? ''] ?? 1;
 const MINIONS = {
   melee: { file: 'Skeleton_Minion', weapon: 'Skeleton_Blade', offhand: 'Skeleton_Shield_Small_A', attack: '1H_Melee_Attack_Chop', tint: /Cloak/ },
   caster: { file: 'Skeleton_Mage', weapon: 'Skeleton_Staff', offhand: '', attack: 'Spellcast_Shoot', tint: /Hat/ },
@@ -596,7 +622,7 @@ function makeAvatar(u: WUnit): Avatar | null {
   let offhand = '';
   let hue: THREE.Color | null = null;
   if (u.kind === 'champ') {
-    const h = HEROES[u.champ!.def.id] ?? HEROES.lux;
+    const h = heroFor(u.champ!.def);
     file = h.file;
     attack = h.attack;
     abilities = h.abilities;
@@ -656,7 +682,7 @@ function makeAvatar(u: WUnit): Avatar | null {
   if (weapon) attach(weapon, 'handslot.r');
   if (offhand) attach(offhand, 'handslot.l');
 
-  const scale = (unitHeight(u) / (heights.get(file) ?? 2)) * (u.kind === 'champ' ? CHAMP_SIZE[u.champ!.def.id] ?? 1 : 1);
+  const scale = (unitHeight(u) / (heights.get(file) ?? 2)) * (u.kind === 'champ' ? classSize(u.champ!.def) : 1);
   model.scale.setScalar(scale);
   const root = new THREE.Group();
   root.add(model);

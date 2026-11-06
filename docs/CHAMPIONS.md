@@ -35,3 +35,28 @@ Values not present in either source, or mechanics the engine cannot express. Eac
 
 Riot Games, League of Legends and all champion names, abilities and text are trademarks / property of Riot Games.
 This is a non-commercial fan project and is not endorsed by Riot Games.
+
+
+## Full roster, items, runes, draft (patch 16.22.1)
+
+- `scripts/build-all.mjs` pulls every champion, the Summoner's Rift item list and the rune trees from Riot Data Dragon
+  (plus CommunityDragon for per-rank damage numbers) and downloads icons into `public/img`.
+- **20 champions keep their hand-written kits** (`src/kits`). The other **153** run on the generic ability engine
+  (`src/champions/generic.json`): stats, text, cooldowns, costs and ranges are exact; damage and ratios are evaluated from
+  the CommunityDragon calculations; **the ability shape (skillshot / ground target / dash / self nova) and CC durations are
+  inferred**, so their kits are approximations (no recasts, transforms, summons or passives beyond text). A few spells that
+  did not parse deal no damage (e.g. Kha'Zix, Yunara) and Jax E's damage is zeroed (bogus calc).
+- **Models**: Riot's models are not available. Champions use CC0 KayKit bodies picked by class and tinted with the dominant
+  colour of the champion icon; icons are the real Data Dragon art.
+- **Items**: real SR shop with recipes (owned components are consumed and lower the price). Only HP, AD, AP, armor, MR,
+  attack speed, move speed, lifesteal, ability haste and mana are simulated; crit, on-hit and active effects are text only.
+  Recommended builds are generated per class by scoring items against what the engine simulates (not Riot's builds).
+- **Runes**: all 5 trees selectable. Simulated: keystones Electrocute, Press the Attack, Phase Rush, Fleet Footwork, Grasp,
+  Arcane Comet, Hail of Blades, Conqueror, Lethal Tempo, Dark Harvest, Glacial Augment, Aftershock (numbers simplified), plus
+  the flat-stat minor runes in `RUNE_STATS`. Other runes can be chosen but have no effect. Shards are approximated.
+- **Draft**: solo play opens champion select: 5 bans each, then a 1-2-2-2-2-1 pick; bots pick for their position.
+  Multiplayer lobbies still use the older picker.
+- **Post-match**: scoreboard, damage by type, taken/healing/objective damage, team graphs, item timelines.
+  Stats are tracked on the host only, so guests in multiplayer see host-side data only when hosting.
+- **Mobile**: portrait and landscape; pinch zooms in, zoom-out is locked to the default view; Safari page-zoom gestures are blocked.
+  Tested in WebKit 18 (Playwright) emulating an iPhone 14, not on a physical device.
