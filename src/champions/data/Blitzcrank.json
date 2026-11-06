@@ -1,0 +1,815 @@
+{
+ "id": "Blitzcrank",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Blitzcrank",
+ "title": "the Great Steam Golem",
+ "tags": [
+  "Tank",
+  "Support"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 600,
+  "hpperlevel": 109,
+  "mp": 267,
+  "mpperlevel": 40,
+  "movespeed": 325,
+  "armor": 37,
+  "armorperlevel": 4.7,
+  "spellblock": 32,
+  "spellblockperlevel": 2.05,
+  "attackrange": 125,
+  "hpregen": 7.5,
+  "hpregenperlevel": 0.75,
+  "mpregen": 8.5,
+  "mpregenperlevel": 0.8,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 62,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 1.13,
+  "attackspeed": 0.625
+ },
+ "basicAttack": {
+  "range": 125,
+  "attackSpeed": 0.625,
+  "asRatio": {
+   "baseValue": 0.625,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.029999999329447746
+ },
+ "passive": {
+  "name": "Mana Barrier",
+  "description": "Blitzcrank gains a shield based on their mana when dropping to low health.",
+  "values": {
+   "ManaBarrierIcon": {
+    "DataValues": {
+     "HealthThreshold": [
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896,
+      0.30000001192092896
+     ],
+     "ManaPercent": [
+      0.3499999940395355,
+      0.3499999940395355,
+      0.3499999940395355,
+      0.3499999940395355,
+      0.3499999940395355,
+      0.3499999940395355,
+      0.3499999940395355
+     ],
+     "ShieldDuration": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "Cooldown": [
+      90,
+      90,
+      90,
+      90,
+      90,
+      90,
+      90
+     ],
+     "ManaRatio": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "calcs": {
+     "ShieldAmount": {
+      "mSimpleTooltipCalculationDisplay": 6,
+      "mFormulaParts": [
+       {
+        "mCoefficient": 0.3499999940395355,
+        "__type": "AbilityResourceByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Rocket Grab",
+   "description": "Blitzcrank fires their right hand to grab an opponent on its path, dealing damage and dragging it back to them.",
+   "tooltip": "Blitzcrank fires their right hand, <status>Pulling</status> the first enemy hit towards them and dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    20,
+    19,
+    18,
+    17,
+    16
+   ],
+   "ddCost": [
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    1079,
+    1079,
+    1079,
+    1079,
+    1079
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "RocketGrab": {
+     "DataValues": {
+      "BaseDamage": [
+       60,
+       110,
+       160,
+       210,
+       260,
+       310,
+       360
+      ],
+      "LolipopLength": [
+       70,
+       70,
+       70,
+       70,
+       70,
+       70,
+       70
+      ],
+      "APRatio": [
+       1.2000000476837158,
+       1.2000000476837158,
+       1.2000000476837158,
+       1.2000000476837158,
+       1.2000000476837158,
+       1.2000000476837158,
+       1.2000000476837158
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      21,
+      20,
+      19,
+      18,
+      17,
+      16,
+      16
+     ],
+     "castRange": [
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 1800,
+     "lineWidth": 70,
+     "tags": [
+      "Trait_ImmobilizingCCSpell",
+      "Trait_DamageAbility",
+      "Trait_SignatureSpell",
+      "Trait_Ranged_StopsFirstHit"
+     ]
+    },
+    "RocketGrabMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      23,
+      22,
+      21,
+      20,
+      19,
+      18,
+      18
+     ],
+     "castRange": [
+      1080,
+      1080,
+      1080,
+      1080,
+      1080,
+      1080,
+      1080
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "missileSpeed": 1800,
+     "lineWidth": 70
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Overdrive",
+   "description": "Blitzcrank super charges themself to get dramatically increased Move and Attack Speed. They are temporarily slowed after the effect ends.",
+   "tooltip": "Blitzcrank supercharges themself, gaining <speed>{{ movespeedmod*100 }}% decaying Move Speed</speed> and <attackSpeed>{{ attackspeedmod*100 }}% Attack Speed</attackSpeed> for {{ duration }} seconds.<br /><br />Afterwards, Blitzcrank is <status>Slowed</status> by {{ movespeedmodreduction*100 }}% for {{ slowduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    15,
+    15,
+    15,
+    15,
+    15
+   ],
+   "ddCost": [
+    75,
+    75,
+    75,
+    75,
+    75
+   ],
+   "ddRange": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Move Speed",
+     "Attack Speed"
+    ],
+    "effect": [
+     "{{ movespeedmod*100.000000 }}% -> {{ movespeedmodnl*100.000000 }}%",
+     "{{ attackspeedmod*100.000000 }}% -> {{ attackspeedmodnl*100.000000 }}%"
+    ]
+   },
+   "game": {
+    "Overdrive": {
+     "DataValues": {
+      "MoveSpeedMod": [
+       0.550000011920929,
+       0.6000000238418579,
+       0.6499999761581421,
+       0.699999988079071,
+       0.75,
+       0.800000011920929,
+       0.8500000238418579
+      ],
+      "AttackSpeedMod": [
+       0.20000000298023224,
+       0.30000001192092896,
+       0.4000000059604645,
+       0.5,
+       0.6000000238418579,
+       0.699999988079071,
+       0.800000011920929
+      ],
+      "Duration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "MoveSpeedModReduction": [
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896
+      ],
+      "SlowDuration": [
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "MoveSpeedModMin": [
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612
+      ],
+      "MoveSpeedModMinTime": [
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5
+      ],
+      "PercentHealthDamage": [
+       0.009999999776482582,
+       0.009999999776482582,
+       0.009999999776482582,
+       0.009999999776482582,
+       0.009999999776482582,
+       0.009999999776482582,
+       0.009999999776482582
+      ]
+     },
+     "calcs": {
+      "{c01903c1}": {
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 60,
+         "mInitialBonusPerLevel": 20,
+         "mBreakpoints": [
+          {
+           "mLevel": 7,
+           "mBonusPerLevelAtAndAfter": 5,
+           "__type": "Breakpoint"
+          }
+         ],
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15
+     ],
+     "castRange": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "mana": [
+      75,
+      75,
+      75,
+      75,
+      75,
+      75
+     ],
+     "missileSpeed": 20,
+     "tags": [
+      "Trait_AttackBuff_Duration"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Power Fist",
+   "description": "Blitzcrank charges up their fist to make the next attack deal double damage and pop their target up in the air.",
+   "tooltip": "Blitzcrank charges up their fist, causing their next Attack to <status>Knock Up</status> for {{ ccduration }} second(s) and deal <physicalDamage>{{ totaldamage }} physical damage</physicalDamage>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    7,
+    6.5,
+    6,
+    5.5,
+    5
+   ],
+   "ddCost": [
+    25,
+    25,
+    25,
+    25,
+    25
+   ],
+   "ddRange": [
+    300,
+    300,
+    300,
+    300,
+    300
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "PowerFist": {
+     "DataValues": {
+      "CCDuration": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mCoefficient": 2,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mCoefficient": 0.25,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{a9d6b924}": {
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mCoefficient": 1.75,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mCoefficient": 1.25,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      7,
+      7,
+      6.5,
+      6,
+      5.5,
+      5,
+      5
+     ],
+     "castRange": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      25,
+      25,
+      25,
+      25,
+      25,
+      25
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "PositiveEffect_EmpowerAttack",
+      "Trait_AttackReset",
+      "Trait_ImmobilizingCCSpell",
+      "Trait_DamageAbility",
+      "Trait_Strike",
+      "Trait_Low_Damage"
+     ]
+    },
+    "PowerFistAttack": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      49.400001525878906,
+      49.400001525878906,
+      49.400001525878906,
+      49.400001525878906,
+      49.400001525878906,
+      49.400001525878906,
+      49.400001525878906
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 0
+    },
+    "PowerFistSlow": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Static Field",
+   "description": "Enemies attacked by Blitzcrank are marked and take lightning damage after 1 second. Additionally, Blitzcrank can activate this ability to remove nearby enemies' shields, damage them, and silence them briefly.",
+   "tooltip": "<spellPassive>Passive: </spellPassive>While this ability is available, lightning charges Blitzcrank's fists, marking those  Attacked. After 1 second, they are shocked for <magicDamage>{{ passivedamage }} magic damage</magicDamage>.<br /><br /><spellActive>Active: </spellActive>Blitzcrank overcharges, dealing <magicDamage>{{ activedamage }} magic damage</magicDamage> and <status>Silencing</status> nearby enemies for {{ silenceduration }} seconds. Their shields are also destroyed.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    60,
+    40,
+    20
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    600,
+    600,
+    600
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Passive Base Damage",
+     "Passive AP Ratio",
+     "Active Base Damage",
+     "Active Cooldown"
+    ],
+    "effect": [
+     "{{ passivebasedamage }} -> {{ passivebasedamageNL }}",
+     "{{ passiveapratio*100.000000 }}% -> {{ passiveaprationl*100.000000 }}%",
+     "{{ activebasedamage }} -> {{ activebasedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "StaticField": {
+     "DataValues": {
+      "PassiveBaseDamage": [
+       0,
+       50,
+       100,
+       150,
+       200,
+       250,
+       300
+      ],
+      "ZapCountdown": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "ActiveRange": [
+       600,
+       600,
+       600,
+       600,
+       600,
+       600,
+       600
+      ],
+      "ActiveBaseDamage": [
+       150,
+       275,
+       400,
+       525,
+       650,
+       775,
+       900
+      ],
+      "SilenceDuration": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ],
+      "PassiveAPRatio": [
+       0.20000000298023224,
+       0.30000001192092896,
+       0.4000000059604645,
+       0.5,
+       0.6000000238418579,
+       0.699999988079071,
+       0.800000011920929
+      ],
+      "ActiveAPRatio": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "PassiveManaRatio": [
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806
+      ]
+     },
+     "calcs": {
+      "ActiveDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "ActiveBaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "ActiveAPRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "PassiveDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "PassiveBaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "PassiveAPRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.019999999552965164,
+         "__type": "AbilityResourceByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      0,
+      60,
+      40,
+      20,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      600,
+      600,
+      600,
+      600,
+      600,
+      600,
+      600
+     ],
+     "castRadius": [
+      600,
+      600,
+      600,
+      600,
+      600,
+      600,
+      600
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      150,
+      150,
+      0
+     ],
+     "missileSpeed": 347.79998779296875,
+     "tags": [
+      "Trait_Ultimate",
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    }
+   }
+  }
+ ]
+}

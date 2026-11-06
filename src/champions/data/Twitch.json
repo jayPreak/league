@@ -1,0 +1,984 @@
+{
+ "id": "Twitch",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Twitch",
+ "title": "the Plague Rat",
+ "tags": [
+  "Marksman",
+  "Assassin"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 630,
+  "hpperlevel": 98,
+  "mp": 300,
+  "mpperlevel": 40,
+  "movespeed": 330,
+  "armor": 27,
+  "armorperlevel": 4,
+  "spellblock": 33,
+  "spellblockperlevel": 1.1,
+  "attackrange": 550,
+  "hpregen": 3.75,
+  "hpregenperlevel": 0.6,
+  "mpregen": 7.25,
+  "mpregenperlevel": 0.7,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 59,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 3,
+  "attackspeed": 0.679
+ },
+ "basicAttack": {
+  "range": 550,
+  "attackSpeed": 0.679,
+  "asRatio": {
+   "baseValue": 0.6790000200271606,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.09808401763439178
+ },
+ "passive": {
+  "name": "Deadly Venom",
+  "description": "Twitch's basic attacks infect the target %i:OnHit% <OnHit>On-Hit</OnHit>, dealing true damage each second.",
+  "values": {
+   "TwitchDeadlyVenomMarker": {
+    "DataValues": {
+     "Duration": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "MaxStacks": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "APRatio": [
+      0.029999999329447746,
+      0.029999999329447746,
+      0.029999999329447746,
+      0.029999999329447746,
+      0.029999999329447746,
+      0.029999999329447746,
+      0.029999999329447746
+     ]
+    },
+    "calcs": {
+     "DamagePerSecond": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 1,
+        "mBreakpoints": [
+         {
+          "mLevel": 5,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 9,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 13,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 17,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 21,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 25,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 29,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       },
+       {
+        "mDataValue": "APRatio",
+        "__type": "StatByNamedDataValueCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "DamagePerSecondMax": {
+      "mMultiplier": {
+       "mDataValue": "MaxStacks",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "mModifiedGameCalculation": "DamagePerSecond",
+      "__type": "GameCalculationModified"
+     },
+     "DamageMaxTotal": {
+      "mMultiplier": {
+       "mPart1": {
+        "mDataValue": "Duration",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mPart2": {
+        "mDataValue": "MaxStacks",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "__type": "ProductOfSubPartsCalculationPart"
+      },
+      "mModifiedGameCalculation": "DamagePerSecond",
+      "__type": "GameCalculationModified"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Ambush",
+   "description": "Twitch becomes Camouflaged for a short duration and gains Move Speed. When leaving Camouflage, Twitch gains Attack Speed for a short duration.<br><br>When an enemy champion with Deadly Venom dies, Ambush's cooldown is reset.",
+   "tooltip": "Twitch <keywordStealth>Camouflages</keywordStealth> and gains <speed>{{ movespeedmod }}% Move Speed</speed> for {{ stealthduration }} seconds. The Move Speed increases to {{ hiddenspeed }}% while near an enemy champion that can't see him. After exiting <keywordStealth>Camouflage</keywordStealth>, Twitch gains <attackSpeed>{{ attackspeedmod*100 }}% Attack Speed</attackSpeed> for {{ attackspeedduration }} seconds.<br /><br />When an enemy champion dies while afflicted with <keywordMajor>Venom</keywordMajor>, this Ability's Cooldown is refreshed.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    16,
+    16,
+    16,
+    16,
+    16
+   ],
+   "ddCost": [
+    40,
+    40,
+    40,
+    40,
+    40
+   ],
+   "ddRange": [
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Camouflage Duration",
+     "Attack Speed"
+    ],
+    "effect": [
+     "{{ stealthduration }} -> {{ stealthdurationNL }}",
+     "{{ attackspeedmod*100.000000 }}% -> {{ attackspeedmodnl*100.000000 }}%"
+    ]
+   },
+   "game": {
+    "TwitchHideInShadows": {
+     "DataValues": {
+      "AttackSpeedMod": [
+       0.3499999940395355,
+       0.4000000059604645,
+       0.44999998807907104,
+       0.5,
+       0.550000011920929,
+       0.6000000238418579,
+       0.6499999761581421
+      ],
+      "AttackSpeedDuration": [
+       6,
+       6,
+       6,
+       6,
+       6,
+       6,
+       6
+      ],
+      "StealthDuration": [
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15
+      ],
+      "MaxFadeTime": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "StealthDetectionRange": [
+       500,
+       500,
+       500,
+       500,
+       500,
+       500,
+       500
+      ],
+      "MoveSpeedMod": [
+       10,
+       10,
+       10,
+       10,
+       10,
+       10,
+       10
+      ],
+      "HiddenSpeed": [
+       30,
+       30,
+       30,
+       30,
+       30,
+       30,
+       30
+      ],
+      "MoveBonusRange": [
+       1000,
+       1000,
+       1000,
+       1000,
+       1000,
+       1000,
+       1000
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16
+     ],
+     "castRange": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "mana": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_AttackBuff_Duration",
+      "Trait_Camouflage"
+     ]
+    },
+    "TwitchHideInShadowsImproved": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16
+     ],
+     "castRange": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "mana": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+     ],
+     "missileSpeed": 0
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Venom Cask",
+   "description": "Twitch hurls a cask of venom that explodes in an area, slowing targets and applying deadly venom to the target.",
+   "tooltip": "Twitch hurls a cask that adds a stack of <spellName>Deadly Venom</spellName> to all enemies struck and leaves behind a toxic cloud that persists for {{ duration }} seconds.<br /><br />Enemies that remain within the cloud are <status>Slowed</status> by {{ totalslowamount }}% and receive an additional stack of <spellName>Deadly Venom</spellName> each second.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    13,
+    12,
+    11,
+    10,
+    9
+   ],
+   "ddCost": [
+    70,
+    70,
+    70,
+    70,
+    70
+   ],
+   "ddRange": [
+    950,
+    950,
+    950,
+    950,
+    950
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Move Speed Slow",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ baseslowamount }}% -> {{ baseslowamountNL }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "TwitchVenomCask": {
+     "DataValues": {
+      "BaseSlowAmount": [
+       25,
+       30,
+       35,
+       40,
+       45,
+       50,
+       55
+      ],
+      "Duration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "AoERadius": [
+       300,
+       300,
+       300,
+       300,
+       300,
+       300,
+       300
+      ],
+      "SlowAPRatio": [
+       0.05999999865889549,
+       0.05999999865889549,
+       0.05999999865889549,
+       0.05999999865889549,
+       0.05999999865889549,
+       0.05999999865889549,
+       0.05999999865889549
+      ]
+     },
+     "calcs": {
+      "TotalSlowAmount": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseSlowAmount",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "SlowAPRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      14,
+      13,
+      12,
+      11,
+      10,
+      9,
+      9
+     ],
+     "castRange": [
+      950,
+      950,
+      950,
+      950,
+      950,
+      950,
+      950
+     ],
+     "castRadius": [
+      275,
+      275,
+      275,
+      275,
+      275,
+      275,
+      275
+     ],
+     "mana": [
+      70,
+      70,
+      70,
+      70,
+      70,
+      70
+     ],
+     "missileSpeed": 1750,
+     "tags": [
+      "Trait_Target_Area",
+      "Trait_AoE"
+     ]
+    },
+    "TwitchVenomCaskDebuff": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11
+     ],
+     "castRange": [
+      950,
+      950,
+      950,
+      950,
+      950,
+      950,
+      950
+     ],
+     "castRadius": [
+      250,
+      250,
+      250,
+      250,
+      250,
+      250,
+      250
+     ],
+     "mana": [
+      50,
+      55,
+      60,
+      65,
+      70,
+      75
+     ],
+     "missileSpeed": 1750
+    },
+    "TwitchVenomCaskMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      1500,
+      1500,
+      1500,
+      1500,
+      1500,
+      1500,
+      1500
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "missileSpeed": 1400,
+     "lineWidth": 120
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Contaminate",
+   "description": "Twitch wreaks further havoc on poisoned enemies with a blast of his vile diseases.",
+   "tooltip": "Deals <physicalDamage>{{ basedamage }} physical damage</physicalDamage> to all nearby enemies affected by <spellName>Deadly Venom</spellName>, plus an additional <physicalDamage>{{ physicaldamageperstack }} physical damage</physicalDamage> and <magicDamage>{{ magicdamageperstack }} magical damage</magicDamage> per stack of <spellName>Deadly Venom</spellName>.<br /><br />Max Damage: <physicalDamage>{{ maxphysicaldamage }} physical damage</physicalDamage> and <magicDamage>{{ maxmagicdamage }} magical damage</magicDamage>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    12,
+    11,
+    10,
+    9,
+    8
+   ],
+   "ddCost": [
+    50,
+    60,
+    70,
+    80,
+    90
+   ],
+   "ddRange": [
+    1200,
+    1200,
+    1200,
+    1200,
+    1200
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Damage per Stack",
+     "@AbilityResourceName@ Cost"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ basephysicaldamageperstack }} -> {{ basephysicaldamageperstackNL }}",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "TwitchExpunge": {
+     "DataValues": {
+      "BaseDamage": [
+       10,
+       20,
+       30,
+       40,
+       50,
+       60,
+       70
+      ],
+      "BasePhysicalDamagePerStack": [
+       10,
+       15,
+       20,
+       25,
+       30,
+       35,
+       40
+      ],
+      "bADRatioPerStack": [
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355
+      ],
+      "APRatioPerStack": [
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355
+      ],
+      "MaxStacks": [
+       6,
+       6,
+       6,
+       6,
+       6,
+       6,
+       6
+      ]
+     },
+     "calcs": {
+      "PhysicalDamagePerStack": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BasePhysicalDamagePerStack",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "bADRatioPerStack",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MagicDamagePerStack": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "APRatioPerStack",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MaxPhysicalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mPart1": {
+          "mDataValue": "MaxStacks",
+          "__type": "NamedDataValueCalculationPart"
+         },
+         "mPart2": {
+          "mDataValue": "BasePhysicalDamagePerStack",
+          "__type": "NamedDataValueCalculationPart"
+         },
+         "__type": "ProductOfSubPartsCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mSubpart": {
+          "mPart1": {
+           "mDataValue": "bADRatioPerStack",
+           "__type": "NamedDataValueCalculationPart"
+          },
+          "mPart2": {
+           "mDataValue": "MaxStacks",
+           "__type": "NamedDataValueCalculationPart"
+          },
+          "__type": "ProductOfSubPartsCalculationPart"
+         },
+         "__type": "StatBySubPartCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MaxMagicDamage": {
+       "mMultiplier": {
+        "mDataValue": "MaxStacks",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mModifiedGameCalculation": "MagicDamagePerStack",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      13,
+      12,
+      11,
+      10,
+      9,
+      8,
+      8
+     ],
+     "castRange": [
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+     ],
+     "castRadius": [
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+     ],
+     "mana": [
+      50,
+      60,
+      70,
+      80,
+      90,
+      100
+     ],
+     "missileSpeed": 20,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_SignatureSpell",
+      "Trait_AoE"
+     ]
+    },
+    "TwitchEParticle": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      2500,
+      2500,
+      2500,
+      2500,
+      2500,
+      2500,
+      2500
+     ],
+     "missileSpeed": 3000
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Spray and Pray",
+   "description": "Twitch unleashes the full power of his crossbow, shooting bolts over a great distance that pierce all enemies caught in their path.",
+   "tooltip": "Twitch unleashes his crossbow, gaining {{ bonusrange }} Attack Range and <scaleAD>{{ bonusad }} Attack Damage</scaleAD>, and causing his Attacks to become piercing bolts for {{ duration }} seconds. These bolts hit all enemies they pass through, but deal {{ falloffdamage*100 }}% less damage to subsequent targets, down to a minimum of {{ minimumfalloffdamage*100 }}% damage.<br />{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    90,
+    90,
+    90
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    1200,
+    1200,
+    1200
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Attack Damage"
+    ],
+    "effect": [
+     "{{ bonusad }} -> {{ bonusadNL }}"
+    ]
+   },
+   "game": {
+    "TwitchFullAutomatic": {
+     "DataValues": {
+      "BonusRange": [
+       300,
+       300,
+       300,
+       300,
+       300,
+       300,
+       300
+      ],
+      "FallOffDamage": [
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612
+      ],
+      "MinimumFallOffDamage": [
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579
+      ],
+      "BonusAD": [
+       15,
+       30,
+       45,
+       60,
+       75,
+       90,
+       105
+      ],
+      "Duration": [
+       6,
+       6,
+       6,
+       6,
+       6,
+       6,
+       6
+      ],
+      "OvershootMult": [
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896
+      ],
+      "OvershootMin": [
+       250,
+       250,
+       250,
+       250,
+       250,
+       250,
+       250
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      90,
+      90,
+      90,
+      90,
+      90,
+      90,
+      90
+     ],
+     "castRange": [
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+     ],
+     "castRadius": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      0,
+      0,
+      0
+     ],
+     "tags": [
+      "Trait_Ultimate",
+      "Trait_SylasSpecialAttackOverride",
+      "Trait_MultiTargetAttack",
+      "Trait_AttackBuff_Duration",
+      "Trait_AoE"
+     ]
+    },
+    "TwitchUlt": {
+     "buff": true
+    },
+    "TwitchSprayAndPrayAttack": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      5000,
+      5000,
+      5000,
+      5000,
+      5000,
+      5000,
+      5000
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "missileSpeed": 4000,
+     "lineWidth": 60,
+     "tags": [
+      "Trait_MultiTargetAttack"
+     ]
+    }
+   }
+  }
+ ]
+}

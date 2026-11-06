@@ -1,0 +1,1191 @@
+{
+ "id": "Rengar",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Rengar",
+ "title": "the Pridestalker",
+ "tags": [
+  "Assassin",
+  "Fighter"
+ ],
+ "resource": "Ferocity",
+ "stats": {
+  "hp": 590,
+  "hpperlevel": 104,
+  "mp": 4,
+  "mpperlevel": 0,
+  "movespeed": 345,
+  "armor": 34,
+  "armorperlevel": 4.2,
+  "spellblock": 32,
+  "spellblockperlevel": 2.05,
+  "attackrange": 125,
+  "hpregen": 6,
+  "hpregenperlevel": 0.5,
+  "mpregen": 0,
+  "mpregenperlevel": 0,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 68,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 3,
+  "attackspeed": 0.667
+ },
+ "basicAttack": {
+  "range": 125,
+  "attackSpeed": 0.667,
+  "asRatio": {
+   "baseValue": 0.6669999957084656,
+   "__type": "ModifiableFloat"
+  }
+ },
+ "passive": {
+  "name": "Unseen Predator",
+  "description": "While in Brush, Rengar leaps at his target with his basic attack.<br><br>Rengar generates Ferocity whenever he casts an ability. At Max Ferocity, his next ability is empowered.<br><br>Killing enemy champions awards trophies on Rengar's <font color='#BBFFFF'>Bonetooth Necklace</font>, granting bonus attack damage.",
+  "values": {
+   "RengarPassive": {
+    "DataValues": {
+     "MaxFerocity": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "InCombatTimer": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "InCombatTimerVisual": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "EmpoweredMSDuration": [
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5
+     ],
+     "RengarPassiveRangeIncrease": [
+      620,
+      620,
+      620,
+      620,
+      620,
+      620,
+      620
+     ],
+     "LeapFerocityGeneration": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "BonusLeapRange": [
+      620,
+      620,
+      620,
+      620,
+      620,
+      620,
+      620
+     ]
+    },
+    "calcs": {
+     "EmpoweredMS": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 0.30000001192092896,
+        "mBreakpoints": [
+         {
+          "mLevel": 7,
+          "mAdditionalBonusAtThisLevel": 0.10000000149011612,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 13,
+          "mAdditionalBonusAtThisLevel": 0.10000000149011612,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 19,
+          "mAdditionalBonusAtThisLevel": 0.10000000149011612,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 25,
+          "mAdditionalBonusAtThisLevel": 0.10000000149011612,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "__type": "GameCalculation"
+     }
+    }
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Savagery",
+   "description": "Rengar's next Attack brutally stabs his target for bonus damage.<br><br>Ferocity effect: deals increased damage and grants Attack Speed.",
+   "tooltip": "Rengar's next 2 Attacks gain <attackSpeed>{{ asbonus }}% Attack Speed</attackSpeed>. The first Attack deals <physicalDamage>{{ qtotaldamage }} physical damage</physicalDamage>.<br /><br /><keywordMajor>Max Ferocity:</keywordMajor> The first Attack deals <physicalDamage>{{ empoweredqtotaldamage }} physical damage</physicalDamage> and grants Rengar <attackSpeed>{{ empoweredqas }} Attack Speed</attackSpeed> for {{ asduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25
+   ],
+   "ddCost": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "ddRange": [
+    450,
+    450,
+    450,
+    450,
+    450
+   ],
+   "costType": "Generates 1 Ferocity",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ ammorechargetime }} -> {{ ammorechargetimeNL }}"
+    ]
+   },
+   "game": {
+    "RengarQ": {
+     "DataValues": {
+      "BaseDamage": [
+       -15,
+       20,
+       55,
+       90,
+       125,
+       160,
+       195
+      ],
+      "BaseADRatio": [
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806,
+       0.05000000074505806
+      ],
+      "BaseADRatioTooltip": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "EmpoweredADRatio": [
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224
+      ],
+      "TowerMod": [
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579
+      ],
+      "ASDuration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "ASBonus": [
+       40,
+       40,
+       40,
+       40,
+       40,
+       40,
+       40
+      ],
+      "BuffDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ]
+     },
+     "calcs": {
+      "EmpoweredQAS": {
+       "mMultiplier": {
+        "mNumber": 0.009999999776482582,
+        "__type": "NumberCalculationPart"
+       },
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 50,
+         "mInitialBonusPerLevel": 3,
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        }
+       ],
+       "mDisplayAsPercent": true,
+       "__type": "GameCalculation"
+      },
+      "QBonusDamage": {
+       "mSimpleTooltipCalculationDisplay": 5,
+       "DamageType": 0,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mDataValue": "BaseADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{d4a43abe}": {
+       "DamageType": 0,
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 35,
+         "mInitialBonusPerLevel": 15,
+         "mBreakpoints": [
+          {
+           "mLevel": 9,
+           "mBonusPerLevelAtAndAfter": 10,
+           "__type": "Breakpoint"
+          }
+         ],
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mDataValue": "EmpoweredADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{95c7ca04}": {
+       "mFormulaParts": [
+        {
+         "mSubparts": [
+          {
+           "mPart1": {
+            "mSpellCalculationKey": "QBonusDamage",
+            "__type": "{f3cbe7b2}"
+           },
+           "mPart2": {
+            "mDataValue": "TowerMod",
+            "__type": "NamedDataValueCalculationPart"
+           },
+           "__type": "ProductOfSubPartsCalculationPart"
+          }
+         ],
+         "__type": "SumOfSubPartsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{f2ca2500}": {
+       "mFormulaParts": [
+        {
+         "mSubparts": [
+          {
+           "mPart1": {
+            "mSpellCalculationKey": "{d4a43abe}",
+            "__type": "{f3cbe7b2}"
+           },
+           "mPart2": {
+            "mDataValue": "TowerMod",
+            "__type": "NamedDataValueCalculationPart"
+           },
+           "__type": "ProductOfSubPartsCalculationPart"
+          }
+         ],
+         "__type": "SumOfSubPartsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "QTotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "tooltipOnly": true,
+       "DamageType": 0,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mCoefficient": 1,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mDataValue": "BaseADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "EmpoweredQTotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "tooltipOnly": true,
+       "DamageType": 0,
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 35,
+         "mInitialBonusPerLevel": 15,
+         "mBreakpoints": [
+          {
+           "mLevel": 9,
+           "mBonusPerLevelAtAndAfter": 10,
+           "__type": "Breakpoint"
+          }
+         ],
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mCoefficient": 1,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mDataValue": "EmpoweredADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      325,
+      325,
+      325,
+      325,
+      325,
+      325,
+      325
+     ],
+     "missileSpeed": 3000,
+     "lineWidth": 55,
+     "maxAmmo": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "ammoRechargeTime": [
+      6,
+      6,
+      5.5,
+      5,
+      4.5,
+      4,
+      3.5
+     ],
+     "tags": [
+      "Trait_AttackReset",
+      "Trait_DamageAbility",
+      "Trait_Strike",
+      "Trait_SignatureSpell"
+     ]
+    },
+    "RengarQEmp": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "missileSpeed": 3000,
+     "lineWidth": 55,
+     "maxAmmo": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "tags": [
+      "PositiveEffect_EmpowerAttack",
+      "Trait_AttackReset"
+     ]
+    },
+    "RengarQEmpASBuff": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Battle Roar",
+   "description": "Rengar lets out a battle roar, damaging enemies and healing for some of the recent damage he has taken.<br><br>Ferocity effect: additionally breaks crowd control effects.",
+   "tooltip": "Rengar roars, dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage> to nearby enemies and restoring <healing>{{ damagepercentagehealed }}%</healing> of the damage taken in the last {{ healingwindow }} seconds as Health.<br /><br /><keywordMajor>Max Ferocity:</keywordMajor> Deals <magicDamage>{{ totaldamageempowered }} magic damage</magicDamage> and additionally cleanses Rengar of crowd control.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25
+   ],
+   "ddCost": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "ddRange": [
+    450,
+    450,
+    450,
+    450,
+    450
+   ],
+   "costType": "Generates 1 Ferocity",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ ammorechargetime }} -> {{ ammorechargetimeNL }}"
+    ]
+   },
+   "game": {
+    "RengarW": {
+     "DataValues": {
+      "BaseDamage": [
+       20,
+       50,
+       80,
+       110,
+       140,
+       170,
+       200
+      ],
+      "DamagePercentageHealed": [
+       50,
+       50,
+       50,
+       50,
+       50,
+       50,
+       50
+      ],
+      "APRatio": [
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929
+      ],
+      "EmpoweredAPRatio": [
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929
+      ],
+      "HealingWindow": [
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "CCImmuneDuration": [
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "MonsterHealingMod": [
+       100,
+       100,
+       100,
+       100,
+       100,
+       100,
+       100
+      ]
+     },
+     "calcs": {
+      "BonusMonsterDamage": {
+       "mFormulaParts": [
+        {
+         "mStartValue": 65,
+         "mEndValue": 130,
+         "__type": "ByCharLevelInterpolationCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalDamageEmpowered": {
+       "mFormulaParts": [
+        {
+         "values": [
+          0,
+          50,
+          60,
+          70,
+          80,
+          90,
+          100,
+          110,
+          120,
+          130,
+          140,
+          150,
+          160,
+          170,
+          180,
+          190,
+          200,
+          210,
+          220,
+          230,
+          240,
+          250,
+          260,
+          270,
+          280,
+          290,
+          300,
+          310,
+          320,
+          330,
+          340
+         ],
+         "__type": "ByCharLevelFormulaCalculationPart"
+        },
+        {
+         "mDataValue": "EmpoweredAPRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "castRange": [
+      450,
+      450,
+      450,
+      450,
+      450,
+      450,
+      450
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "missileSpeed": 0,
+     "maxAmmo": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "ammoRechargeTime": [
+      22,
+      16,
+      14.5,
+      13,
+      11.5,
+      10,
+      10
+     ],
+     "tags": [
+      "SpecialCase_StasisLocked",
+      "Trait_DamageAbility",
+      "Trait_ActiveHeal",
+      "Trait_Parry",
+      "Trait_Low_Damage",
+      "Trait_AoE"
+     ]
+    },
+    "RengarWEmp": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "castRange": [
+      450,
+      450,
+      450,
+      450,
+      450,
+      450,
+      450
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "missileSpeed": 0,
+     "maxAmmo": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "tags": [
+      "SpecialCase_StasisLocked"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Bola Strike",
+   "description": "Rengar throws a bola, slowing the first target hit for a short duration.<br><br>Ferocity effect: roots the target.",
+   "tooltip": "Rengar throws a bola, dealing <physicalDamage>{{ totaldamage }} physical damage</physicalDamage> to the first enemy hit, revealing and <status>Slowing</status> them by {{ slowamount }}% for {{ ccduration }} seconds.<br /><br /><keywordMajor>Max Ferocity:</keywordMajor> Deals <physicalDamage>{{ totalempowereddamage }} physical damage</physicalDamage> and <status>Roots</status> for {{ ccduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25
+   ],
+   "ddCost": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "ddRange": [
+    1000,
+    1000,
+    1000,
+    1000,
+    1000
+   ],
+   "costType": "Generates 1 Ferocity",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Slow"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ slowamount }}% -> {{ slowamountNL }}%"
+    ]
+   },
+   "game": {
+    "RengarE": {
+     "DataValues": {
+      "RevealDuration": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "BaseDamage": [
+       10,
+       55,
+       100,
+       145,
+       190,
+       235,
+       280
+      ],
+      "SlowAmount": [
+       15,
+       30,
+       45,
+       60,
+       75,
+       90,
+       105
+      ],
+      "CCDuration": [
+       1.75,
+       1.75,
+       1.75,
+       1.75,
+       1.75,
+       1.75,
+       1.75
+      ],
+      "BonusADRatio": [
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "BonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalEmpoweredDamage": {
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 50,
+         "mInitialBonusPerLevel": 15,
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "BonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "missileSpeed": 1500,
+     "castTime": 0.25,
+     "lineWidth": 70,
+     "maxAmmo": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "ammoRechargeTime": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "tags": [
+      "Trait_SwapsIntoImmobilizingCCAbility",
+      "Trait_DamageAbility",
+      "Trait_Low_Damage"
+     ]
+    },
+    "RengarEMis": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 1500,
+     "castTime": 0.25,
+     "lineWidth": 70,
+     "maxAmmo": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "ammoRechargeTime": [
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9
+     ]
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Thrill of the Hunt",
+   "description": "Rengar's predatory instincts take over, <font color='#cd90ee'>Camouflaging</font> him and revealing the nearest enemy champion in a large radius around him. During Thrill of the Hunt, Rengar gains Move Speed and he can leap to the tracked enemy without being in brush, reducing their armor.",
+   "tooltip": "<spellPassive>Passive:</spellPassive> Rengar will also leap Attack when <keywordStealth>Camouflaged</keywordStealth>.<br /><br /><spellActive>Active:</spellActive> Rengar gains <speed>{{ stealthms }}% Move Speed</speed> and <keywordStealth>True Sight</keywordStealth> in a small area around the nearest enemy champion for {{ stealthduration }} seconds.<br /><br />After {{ fadetime }} seconds, Rengar becomes <keywordStealth>Camouflaged</keywordStealth> and can leap without being in Brush. Leaping to the nearest champion deals an additional <physicalDamage>{{ bonusdamage }} physical damage</physicalDamage>, shreds <scaleArmor>{{ armorshred }} Armor</scaleArmor> for {{ armorshredduration }} seconds, and ends this Ability.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    100,
+    90,
+    80
+   ],
+   "ddCost": [
+    0,
+    0,
+    0
+   ],
+   "ddRange": [
+    2500,
+    3000,
+    3500
+   ],
+   "costType": "No Cost",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Armor Reduction",
+     "Duration",
+     "Move Speed",
+     "Tracking Range",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ armorshred }} -> {{ armorshredNL }}",
+     "{{ stealthduration }} -> {{ stealthdurationNL }}",
+     "{{ stealthms }}% -> {{ stealthmsNL }}%",
+     "{{ selfvisionrange }} -> {{ selfvisionrangeNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "RengarR": {
+     "DataValues": {
+      "StealthDuration": [
+       8,
+       12,
+       16,
+       20,
+       24,
+       28,
+       32
+      ],
+      "EnemyDetectionRange": [
+       1600,
+       1600,
+       1600,
+       1600,
+       1600,
+       1600,
+       1600
+      ],
+      "SelfVisionRange": [
+       2000,
+       2500,
+       3000,
+       3500,
+       4000,
+       4500,
+       5000
+      ],
+      "SelfRevealRange": [
+       750,
+       750,
+       750,
+       750,
+       750,
+       750,
+       750
+      ],
+      "StealthMS": [
+       30,
+       40,
+       50,
+       60,
+       70,
+       80,
+       90
+      ],
+      "FadeTime": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "ArmorShred": [
+       10,
+       15,
+       20,
+       25,
+       30,
+       35,
+       40
+      ],
+      "ArmorShredDuration": [
+       4,
+       4,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "LeapRange": [
+       725,
+       725,
+       725,
+       725,
+       725,
+       725,
+       725
+      ]
+     },
+     "calcs": {
+      "BonusDamage": {
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mCoefficient": 1,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      100,
+      100,
+      90,
+      80,
+      80,
+      80,
+      80
+     ],
+     "castRange": [
+      2500,
+      2500,
+      3000,
+      3500,
+      2500,
+      2500,
+      2500
+     ],
+     "castRadius": [
+      75,
+      75,
+      75,
+      75,
+      75,
+      75,
+      75
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_Ultimate",
+      "Trait_Camouflage",
+      "PositiveEffect_Boon",
+      "PositiveEffect_EmpowerAttack",
+      "PositiveEffect_MoveBlock"
+     ]
+    }
+   }
+  }
+ ]
+}

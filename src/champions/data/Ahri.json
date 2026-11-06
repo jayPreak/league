@@ -1,0 +1,1033 @@
+{
+ "id": "Ahri",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Ahri",
+ "title": "the Nine-Tailed Fox",
+ "tags": [
+  "Mage",
+  "Assassin"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 590,
+  "hpperlevel": 104,
+  "mp": 418,
+  "mpperlevel": 25,
+  "movespeed": 330,
+  "armor": 21,
+  "armorperlevel": 4.2,
+  "spellblock": 30,
+  "spellblockperlevel": 1.3,
+  "attackrange": 550,
+  "hpregen": 2.5,
+  "hpregenperlevel": 0.6,
+  "mpregen": 8,
+  "mpregenperlevel": 0.8,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 53,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 2.2,
+  "attackspeed": 0.668
+ },
+ "basicAttack": {
+  "range": 550,
+  "attackSpeed": 0.668,
+  "asRatio": {
+   "baseValue": 0.625,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.10000000149011612
+ },
+ "passive": {
+  "name": "Essence Theft",
+  "description": "After killing 9 minions or monsters, Ahri heals.<br>After taking down an enemy champion, Ahri heals for a greater amount.",
+  "values": {
+   "AhriSkin86Manager": {
+    "DataValues": {
+     "GoldToNextForm": [
+      2000,
+      6000,
+      6000,
+      6000,
+      6000,
+      6000,
+      6000
+     ],
+     "SecondsOutOfCombatTillTransform": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "SecondsOutOfCombatTillEmote": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "calcs": {}
+   },
+   "AhriPassive": {
+    "DataValues": {
+     "TakedownWindow": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "MaxStacks": [
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9
+     ]
+    },
+    "calcs": {
+     "ChampionHeal": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 75,
+        "mEndValue": 165,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       },
+       {
+        "mCoefficient": 0.30000001192092896,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "MinionHeal": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 35,
+        "mEndValue": 95,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       },
+       {
+        "mCoefficient": 0.20000000298023224,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     }
+    },
+    "cooldown": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Orb of Deception",
+   "description": "Ahri sends out and pulls back her orb, dealing magic damage on the way out and true damage on the way back. ",
+   "tooltip": "Ahri throws then pulls back her orb, dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage> on the way out and <trueDamage>{{ totaldamage }} true damage</trueDamage> on the way back.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    7,
+    7,
+    7,
+    7,
+    7
+   ],
+   "ddCost": [
+    55,
+    65,
+    75,
+    85,
+    95
+   ],
+   "ddRange": [
+    970,
+    970,
+    970,
+    970,
+    970
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "@AbilityResourceName@ Cost",
+     "Damage"
+    ],
+    "effect": [
+     "{{ cost }} -> {{ costNL }}",
+     "{{ basedamage }} -> {{ basedamageNL }}"
+    ]
+   },
+   "game": {
+    "AhriQ": {
+     "DataValues": {
+      "BaseDamage": [
+       10,
+       35,
+       60,
+       85,
+       110,
+       135,
+       160
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.5,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      7,
+      7,
+      7,
+      7,
+      7,
+      7,
+      7
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      275,
+      275,
+      275,
+      275,
+      275,
+      275,
+      275
+     ],
+     "mana": [
+      55,
+      65,
+      75,
+      85,
+      95,
+      95
+     ],
+     "missileSpeed": 1100,
+     "castTime": 0.25,
+     "lineWidth": 100,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_SignatureSpell",
+      "Trait_Target_Directional",
+      "Trait_Melee_SmallWindup",
+      "Trait_AoE"
+     ]
+    },
+    "AhriQMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+     ],
+     "castRadius": [
+      275,
+      275,
+      275,
+      275,
+      275,
+      275,
+      275
+     ],
+     "missileSpeed": 2500,
+     "lineWidth": 100
+    },
+    "AhriQReturnMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      11,
+      11,
+      11,
+      11,
+      11,
+      11,
+      11
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      275,
+      275,
+      275,
+      275,
+      275,
+      275,
+      275
+     ],
+     "missileSpeed": 60,
+     "lineWidth": 100
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Fox-Fire",
+   "description": "Ahri gains a brief burst of Move Speed and releases three fox-fires, that lock onto and attack nearby enemies.",
+   "tooltip": "Ahri releases 3 fox-fires that seek nearby enemies and deal <magicDamage>{{ singlefiredamage }} magic damage</magicDamage>, reduced to <magicDamage>{{ multifiredamage }} damage</magicDamage> beyond the first. She also gains <speed>{{ movementspeed*100 }}% Move Speed</speed> decaying over {{ movementspeedduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    9,
+    8,
+    7,
+    6,
+    5
+   ],
+   "ddCost": [
+    30,
+    30,
+    30,
+    30,
+    30
+   ],
+   "ddRange": [
+    700,
+    700,
+    700,
+    700,
+    700
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "AhriW": {
+     "DataValues": {
+      "MovementSpeed": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ],
+      "MovementSpeedDuration": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "MinionBonusDamageMultiplier": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "MinionBonusDamageThreshold": [
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224
+      ],
+      "BaseDamage": [
+       20,
+       40,
+       60,
+       80,
+       100,
+       120,
+       140
+      ],
+      "RepeatDamageMod": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ],
+      "AcquisitionRange": [
+       550,
+       550,
+       550,
+       550,
+       550,
+       550,
+       550
+      ],
+      "BonusAcquisitionRange": [
+       725,
+       725,
+       725,
+       725,
+       725,
+       725,
+       725
+      ],
+      "InitialDelay": [
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25
+      ],
+      "SecondaryDelay": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ],
+      "FlameDuration": [
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5
+      ],
+      "OrbitRadius": [
+       150,
+       150,
+       150,
+       150,
+       150,
+       150,
+       150
+      ],
+      "APRatio": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ]
+     },
+     "calcs": {
+      "SingleFireDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MultiFireDamage": {
+       "mMultiplier": {
+        "mDataValue": "RepeatDamageMod",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mModifiedGameCalculation": "SingleFireDamage",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      9,
+      9,
+      8,
+      7,
+      6,
+      5,
+      4
+     ],
+     "castRange": [
+      600,
+      600,
+      600,
+      600,
+      600,
+      600,
+      600
+     ],
+     "castRadius": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+     ],
+     "mana": [
+      30,
+      30,
+      30,
+      30,
+      30,
+      30
+     ],
+     "missileSpeed": 1800,
+     "castTime": 0.25,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_Low_Damage"
+     ]
+    },
+    "AhriWDamageMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      11,
+      10,
+      9,
+      8,
+      7,
+      6,
+      6
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      710,
+      710,
+      710,
+      710,
+      710,
+      710,
+      710
+     ],
+     "missileSpeed": 1400,
+     "castTime": 0.25
+    },
+    "AhriWMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      10,
+      9,
+      8,
+      7,
+      6,
+      5,
+      5
+     ],
+     "castRange": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "castRadius": [
+      710,
+      710,
+      710,
+      710,
+      710,
+      710,
+      710
+     ],
+     "missileSpeed": 900
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Charm",
+   "description": "Ahri blows a kiss that damages and charms an enemy it encounters, instantly stopping movement abilities and causing them to walk harmlessly towards her.",
+   "tooltip": "Ahri blows a kiss that <status>Charms</status> the first enemy hit for {{ charmduration }} seconds and deals <magicDamage>{{ totaldamage }} magic damage</magicDamage>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    12,
+    12,
+    12,
+    12,
+    12
+   ],
+   "ddCost": [
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "ddRange": [
+    975,
+    975,
+    975,
+    975,
+    975
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Duration"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ charmduration }} -> {{ charmdurationNL }}"
+    ]
+   },
+   "game": {
+    "AhriE": {
+     "DataValues": {
+      "BaseDamage": [
+       40,
+       80,
+       120,
+       160,
+       200,
+       240,
+       280
+      ],
+      "SlowPercent": [
+       -0.6499999761581421,
+       -0.6499999761581421,
+       -0.6499999761581421,
+       -0.6499999761581421,
+       -0.6499999761581421,
+       -0.6499999761581421,
+       -0.6499999761581421
+      ],
+      "CharmDuration": [
+       1.0499999523162842,
+       1.2000000476837158,
+       1.350000023841858,
+       1.5,
+       1.649999976158142,
+       1.7999999523162842,
+       1.9500000476837158
+      ],
+      "APRatio": [
+       0.8500000238418579,
+       0.8500000238418579,
+       0.8500000238418579,
+       0.8500000238418579,
+       0.8500000238418579,
+       0.8500000238418579,
+       0.8500000238418579
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12
+     ],
+     "castRange": [
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      60,
+      60,
+      60,
+      60,
+      60,
+      60
+     ],
+     "missileSpeed": 1200,
+     "castTime": 0.25,
+     "lineWidth": 60,
+     "tags": [
+      "Trait_ImmobilizingCCSpell",
+      "Trait_SignatureSpell",
+      "Trait_DamageAbility",
+      "Trait_Ranged_StopsFirstHit"
+     ]
+    },
+    "AhriEMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      12,
+      12,
+      12,
+      12,
+      12,
+      12,
+      12
+     ],
+     "castRange": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "missileSpeed": 1550,
+     "lineWidth": 60
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Spirit Rush",
+   "description": "Ahri dashes forward and fires essence bolts, damaging nearby enemies. Spirit Rush can be cast up to three times before going on cooldown, and gains additional recasts when taking down enemy champions.",
+   "tooltip": "Ahri nimbly dashes, firing {{ rmaxtargetspercast }} essence bolts at nearby enemies, prioritizing champions. These bolts deal <magicDamage>{{ rcalculateddamage }} magic damage</magicDamage> each. <spellName>Spirit Rush</spellName> can be <recast>Recast</recast> up to 2 more times within {{ rrecastwindow }} seconds.<br /><br />Consuming a champion's Essence with <spellName>Essence Theft</spellName> during this period extends the recast window by up to {{ pdurationextension }} seconds and grants an additional recast of <spellName>Spirit Rush</spellName> (up to {{ rmaxcasts }} stored).{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    140,
+    120,
+    100
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    450,
+    450,
+    450
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ rbasedamage }} -> {{ rbasedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "AhriR": {
+     "DataValues": {
+      "RBaseDamage": [
+       25,
+       75,
+       125,
+       175,
+       225,
+       275,
+       325
+      ],
+      "RMaxTargetsPerCast": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "RMaxCasts": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "RDashDistance": [
+       500,
+       500,
+       500,
+       500,
+       500,
+       500,
+       500
+      ],
+      "RBaseDashSpeed": [
+       1200,
+       1200,
+       1200,
+       1200,
+       1200,
+       1200,
+       1200
+      ],
+      "RRecastWindow": [
+       15,
+       15,
+       15,
+       15,
+       15,
+       15,
+       15
+      ],
+      "RAcquisitionRange": [
+       600,
+       600,
+       600,
+       600,
+       600,
+       600,
+       600
+      ],
+      "RDashCooldown": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "RAPCoefficient": [
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355
+      ],
+      "RResetCasts": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "PDurationExtension": [
+       10,
+       10,
+       10,
+       10,
+       10,
+       10,
+       10
+      ]
+     },
+     "calcs": {
+      "RCalculatedDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "RBaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "rAPCoefficient",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      140,
+      140,
+      120,
+      100,
+      100,
+      100,
+      100
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 2200,
+     "tags": [
+      "Trait_Ultimate",
+      "PositiveEffect_MoveBlock",
+      "Trait_PlayerSelectedDashDirection",
+      "Trait_RecastOrReplaceSpell",
+      "Trait_Ammo",
+      "Trait_AoE"
+     ]
+    },
+    "AhriRMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      11,
+      10,
+      9,
+      8,
+      7,
+      6,
+      6
+     ],
+     "castRange": [
+      800,
+      800,
+      800,
+      800,
+      800,
+      800,
+      800
+     ],
+     "castRadius": [
+      710,
+      710,
+      710,
+      710,
+      710,
+      710,
+      710
+     ],
+     "missileSpeed": 1400
+    }
+   }
+  }
+ ]
+}

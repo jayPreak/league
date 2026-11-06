@@ -1,0 +1,1043 @@
+{
+ "id": "Zed",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Zed",
+ "title": "the Master of Shadows",
+ "tags": [
+  "Assassin"
+ ],
+ "resource": "Energy",
+ "stats": {
+  "hp": 654,
+  "hpperlevel": 99,
+  "mp": 200,
+  "mpperlevel": 0,
+  "movespeed": 345,
+  "armor": 32,
+  "armorperlevel": 4.7,
+  "spellblock": 29,
+  "spellblockperlevel": 2.05,
+  "attackrange": 125,
+  "hpregen": 7,
+  "hpregenperlevel": 0.65,
+  "mpregen": 50,
+  "mpregenperlevel": 0,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 63,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 3.3,
+  "attackspeed": 0.651
+ },
+ "basicAttack": {
+  "range": 125,
+  "attackSpeed": 0.651,
+  "asRatio": {
+   "baseValue": 0.6510000228881836,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.10240550339221954
+ },
+ "passive": {
+  "name": "Contempt for the Weak",
+  "description": "Zed's basic attacks against low health targets deals bonus Magic Damage. This effect can only occur once every few seconds against the same enemy champion.",
+  "values": {
+   "ZedPassive": {
+    "DataValues": {
+     "CurrentHealthThreshold": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "PerUnitCD": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "MonsterDamageCap": [
+      175,
+      175,
+      175,
+      175,
+      175,
+      175,
+      175
+     ],
+     "MonsterDamageMod": [
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75
+     ],
+     "ShenZedQuestKillCount": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+     ],
+     "ShenZedQuestBonus": [
+      0.019999999552965164,
+      0.019999999552965164,
+      0.019999999552965164,
+      0.019999999552965164,
+      0.019999999552965164,
+      0.019999999552965164,
+      0.019999999552965164
+     ]
+    },
+    "calcs": {
+     "{6a1a62e9}": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 0.05000000074505806,
+        "mBreakpoints": [
+         {
+          "mLevel": 7,
+          "mAdditionalBonusAtThisLevel": 0.02500000037252903,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 17,
+          "mAdditionalBonusAtThisLevel": 0.02500000037252903,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 25,
+          "mAdditionalBonusAtThisLevel": 0.02500000037252903,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "mPrecision": 1,
+      "__type": "GameCalculation"
+     },
+     "{ad3d785f}": {
+      "mFormulaParts": [
+       {
+        "mSpellCalculationKey": "{6a1a62e9}",
+        "__type": "{f3cbe7b2}"
+       },
+       {
+        "mDataValue": "ShenZedQuestBonus",
+        "__type": "NamedDataValueCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "__type": "GameCalculation"
+     },
+     "MaxHPDamage": {
+      "mDefaultGameCalculation": "{6a1a62e9}",
+      "mConditionalGameCalculation": "{ad3d785f}",
+      "mConditionalCalculationRequirements": {
+       "mBuffName": "{ecbd8e2e}",
+       "__type": "HasBuffCastRequirement"
+      },
+      "__type": "GameCalculationConditional"
+     },
+     "TotalDamage": {
+      "mFormulaParts": [
+       {
+        "{a8cb9c14}": true,
+        "mStat": 12,
+        "mSubpart": {
+         "mSpellCalculationKey": "MaxHPDamage",
+         "__type": "{f3cbe7b2}"
+        },
+        "__type": "StatBySubPartCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "FinalDamage": {
+      "DamageType": 1,
+      "mConditionalGameCalculation": "TotalDamage",
+      "mConditionalCalculationRequirements": {
+       "mSubRequirements": [
+        {
+         "mInvertResult": true,
+         "mBuffName": "{0f6b8c16}",
+         "__type": "HasBuffCastRequirement"
+        },
+        {
+         "mInvertResult": true,
+         "DataValue": "CurrentHealthThreshold",
+         "__type": "AboveHealthPercentCastRequirement"
+        }
+       ],
+       "__type": "HasAllSubRequirementsCastRequirement"
+      },
+      "{353099b0}": true,
+      "__type": "GameCalculationConditional"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Razor Shuriken",
+   "description": "Zed and his shadows throw their shurikens.<br><br>Each shuriken deals damage to every enemy hit.",
+   "tooltip": "Zed and his <keywordMajor>Shadows</keywordMajor> throw their shurikens, each dealing <physicalDamage>{{ totaldamage }} physical damage</physicalDamage> to the first enemy they pass through, and <physicalDamage>{{ passthroughdamage }} physical damage</physicalDamage> to each additional enemy.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    6,
+    6,
+    6,
+    6,
+    6
+   ],
+   "ddCost": [
+    75,
+    70,
+    65,
+    60,
+    55
+   ],
+   "ddRange": [
+    900,
+    900,
+    900,
+    900,
+    900
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "@AbilityResourceName@ Cost"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "ZedQ": {
+     "DataValues": {
+      "BaseDamage": [
+       40,
+       80,
+       120,
+       160,
+       200,
+       240,
+       280
+      ],
+      "BonusADRatio": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "BonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "PassThroughDamage": {
+       "mMultiplier": {
+        "mNumber": 0.6000000238418579,
+        "__type": "NumberCalculationPart"
+       },
+       "mModifiedGameCalculation": "TotalDamage",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "mana": [
+      75,
+      70,
+      65,
+      60,
+      55,
+      50
+     ],
+     "missileSpeed": 902,
+     "lineWidth": 45,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_SignatureSpell",
+      "Trait_Ranged_Piercing",
+      "Trait_AoE"
+     ]
+    },
+    "ZedQMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      925,
+      925,
+      925,
+      925,
+      925,
+      925,
+      925
+     ],
+     "castRadius": [
+      299.29998779296875,
+      299.29998779296875,
+      299.29998779296875,
+      299.29998779296875,
+      299.29998779296875,
+      299.29998779296875,
+      299.29998779296875
+     ],
+     "missileSpeed": 1700,
+     "lineWidth": 50
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Living Shadow",
+   "description": "<font color='#FF9900'>Passive:</font> Zed gains energy whenever he and his shadows strike an enemy with the same ability. Energy can only be gained once per cast ability.<br><br><font color='#FF9900'>Active:</font> Zed's shadow dashes forward, remaining in place for a few seconds. Reactivating Living Shadow will cause Zed to switch positions with this shadow.",
+   "tooltip": "<spellPassive>Passive:</spellPassive> Zed gains <keywordMajor>{{ energyrestoredoublehit }} Energy</keywordMajor> whenever he and his <keywordMajor>Shadows</keywordMajor> strike an enemy with the same Ability.<br /><br /><spellActive>Active:</spellActive> Zed's <keywordMajor>Shadow</keywordMajor> dashes forward, remaining in place for {{ shadowdurationtooltip }} seconds. <recast>Recasting</recast> this Ability will cause Zed to switch positions with this <keywordMajor>Shadow</keywordMajor>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    20,
+    19,
+    18,
+    17,
+    16
+   ],
+   "ddCost": [
+    40,
+    35,
+    30,
+    25,
+    20
+   ],
+   "ddRange": [
+    650,
+    650,
+    650,
+    650,
+    650
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Energy Return",
+     "@AbilityResourceName@ Cost",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ energyrestoredoublehit }} -> {{ energyrestoredoublehitNL }}",
+     "{{ cost }} -> {{ costNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "ZedW": {
+     "DataValues": {
+      "RecastRange": [
+       2000,
+       2000,
+       2000,
+       2000,
+       2000,
+       2000,
+       2000
+      ],
+      "MimickRange": [
+       25000,
+       25000,
+       25000,
+       25000,
+       25000,
+       25000,
+       25000
+      ],
+      "SwapTimeLimit": [
+       5.25,
+       5.25,
+       5.25,
+       5.25,
+       5.25,
+       5.25,
+       5.25
+      ],
+      "EnergyRestoreDoubleHit": [
+       25,
+       30,
+       35,
+       40,
+       45,
+       50,
+       55
+      ],
+      "ShadowDuration": [
+       5.25,
+       5.25,
+       5.25,
+       5.25,
+       5.25,
+       5.25,
+       5.25
+      ],
+      "ShadowDurationTooltip": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      20,
+      20,
+      19,
+      18,
+      17,
+      16,
+      16
+     ],
+     "castRange": [
+      700,
+      700,
+      700,
+      700,
+      700,
+      700,
+      700
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      40,
+      35,
+      30,
+      25,
+      20,
+      15
+     ],
+     "missileSpeed": 1600,
+     "lineWidth": 40,
+     "tags": [
+      "Trait_PlayerSelectedDashDirection",
+      "Trait_RecastOrReplaceSpell"
+     ]
+    },
+    "ZedW2": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      24,
+      22,
+      20,
+      18,
+      16,
+      14,
+      14
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.2418999969959259,
+     "tags": [
+      "PositiveEffect_Teleport"
+     ]
+    },
+    "ZedWHandler": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      23.5,
+      22,
+      20.5,
+      19,
+      17.5,
+      16,
+      16
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.2418999969959259
+    },
+    "ZedWHandlerBuffName": {
+     "buff": true
+    },
+    "ZedWMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      750,
+      750,
+      750,
+      750,
+      750,
+      750,
+      750
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 2500,
+     "castTime": 0.25099998712539673,
+     "lineWidth": 60
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Shadow Slash",
+   "description": "Zed and his Shadows slash, dealing damage to nearby enemies. Enemies hit by a Shadow's slash are slowed.",
+   "tooltip": "Zed and his <keywordMajor>Shadows</keywordMajor> slash, dealing <physicalDamage>{{ totaldamage }} physical damage</physicalDamage> to nearby enemies.<br /><br />Each enemy champion hit by Zed's slash reduces <spellName>Living Shadow</spellName>'s Cooldown by {{ shadowhitcdr }} seconds.<br /><br />Enemies hit by a <keywordMajor>Shadow</keywordMajor>'s slash are <status>Slowed</status> by {{ movespeedmod*-100 }}% for {{ slowduration }} seconds. Enemies hit by multiple slashes take no additional damage but are <status>Slowed</status> by {{ movespeedmodbonus*-100 }}% instead.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    5,
+    4.5,
+    4,
+    3.5,
+    3
+   ],
+   "ddCost": [
+    40,
+    40,
+    40,
+    40,
+    40
+   ],
+   "ddRange": [
+    290,
+    290,
+    290,
+    290,
+    290
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Slow",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ movespeedmod*-100.000000 }}% -> {{ movespeedmodnl*-100.000000 }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "ZedE": {
+     "DataValues": {
+      "BaseDamage": [
+       47.5,
+       70,
+       92.5,
+       115,
+       137.5,
+       160,
+       182.5
+      ],
+      "ADRatio": [
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071
+      ],
+      "MoveSpeedMod": [
+       -0.15000000596046448,
+       -0.20000000298023224,
+       -0.25,
+       -0.30000001192092896,
+       -0.3499999940395355,
+       -0.4000000059604645,
+       -0.44999998807907104
+      ],
+      "MoveSpeedModBonus": [
+       -0.22499999403953552,
+       -0.30000001192092896,
+       -0.375,
+       -0.44999998807907104,
+       -0.5249999761581421,
+       -0.6000000238418579,
+       -0.675000011920929
+      ],
+      "SlowDuration": [
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "ShadowHitCDR": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "ZedRadius": [
+       315,
+       315,
+       315,
+       315,
+       315,
+       315,
+       315
+      ],
+      "ShadowRadius": [
+       290,
+       290,
+       290,
+       290,
+       290,
+       290,
+       290
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "ADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      5,
+      5,
+      4.5,
+      4,
+      3.5,
+      3,
+      3
+     ],
+     "castRange": [
+      290,
+      290,
+      290,
+      290,
+      290,
+      290,
+      290
+     ],
+     "castRadius": [
+      290,
+      290,
+      290,
+      290,
+      290,
+      290,
+      290
+     ],
+     "mana": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Death Mark",
+   "description": "Zed becomes untargetable and dashes to an enemy champion, marking them. After 3 seconds the mark triggers, repeating a portion of all the damage Zed dealt to the target while they were marked.",
+   "tooltip": "Zed becomes Untargetable and dashes to an enemy champion, marking them. After {{ rdeathmarkduration }} seconds, the mark triggers, dealing <physicalDamage>{{ rcalculateddamage }} physical damage</physicalDamage> and repeating {{ rdamageamp*100 }}% of all damage dealt to the target by Zed while the mark was active.<br /><br />The dash leaves a <keywordMajor>Shadow</keywordMajor> behind for {{ rshadowdurationdisplayed }} seconds. Zed can <recast>Recast</recast> this Ability to switch positions with this <keywordMajor>Shadow</keywordMajor>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    120,
+    110,
+    100
+   ],
+   "ddCost": [
+    0,
+    0,
+    0
+   ],
+   "ddRange": [
+    625,
+    625,
+    625
+   ],
+   "costType": "No Cost",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Mark Detonation Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ rdamageamp*100.000000 }}% -> {{ rdamageampnl*100.000000 }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "ZedR": {
+     "DataValues": {
+      "RDamageAmp": [
+       0.10000000149011612,
+       0.25,
+       0.4000000059604645,
+       0.550000011920929,
+       0.699999988079071,
+       0.8500000238418579,
+       1
+      ],
+      "RReactivateCD": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ],
+      "RShadowDurationDisplayed": [
+       7.5,
+       7.5,
+       7.5,
+       7.5,
+       7.5,
+       7.5,
+       7.5
+      ],
+      "RDeathMarkDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "RCanSwapBuffDuration": [
+       7.5,
+       7.5,
+       7.5,
+       7.5,
+       7.5,
+       7.5,
+       7.5
+      ],
+      "RGhostedDuration": [
+       4,
+       4,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "RVisionDuration": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     "calcs": {
+      "{43a019eb}": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "RShadowDurationDisplayed",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mNumber": 0.5,
+         "__type": "NumberCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "RCalculatedDamage": {
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mCoefficient": 1,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      120,
+      120,
+      110,
+      100,
+      100,
+      100,
+      100
+     ],
+     "castRange": [
+      625,
+      625,
+      625,
+      625,
+      625,
+      625,
+      625
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_Ultimate",
+      "PositiveEffect_Teleport",
+      "Trait_DamageAbility",
+      "Trait_RecastOrReplaceSpell",
+      "Trait_Untargetable",
+      "Trait_ProjectileDestruction",
+      "Trait_Strike"
+     ]
+    },
+    "ZedR2": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      140,
+      120,
+      100,
+      80,
+      80,
+      80,
+      80
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.2418999969959259,
+     "tags": [
+      "PositiveEffect_Teleport",
+      "Trait_Ultimate"
+     ]
+    },
+    "ZedRADBuff": {
+     "buff": true
+    },
+    "ZedRDashEffectShadow": {
+     "DataValues": {},
+     "calcs": {}
+    },
+    "ZedRDeathMark": {
+     "buff": true
+    },
+    "ZedRHandler": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      23.5,
+      22,
+      20.5,
+      19,
+      17.5,
+      16,
+      16
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.2418999969959259
+    },
+    "ZedRMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 1750,
+     "castTime": 0.25099998712539673,
+     "lineWidth": 60
+    },
+    "ZedRPassiveBuff": null,
+    "ZedUltExecute": {
+     "buff": true
+    }
+   }
+  }
+ ]
+}

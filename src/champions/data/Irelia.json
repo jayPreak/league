@@ -1,0 +1,1039 @@
+{
+ "id": "Irelia",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Irelia",
+ "title": "the Blade Dancer",
+ "tags": [
+  "Fighter",
+  "Assassin"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 630,
+  "hpperlevel": 115,
+  "mp": 350,
+  "mpperlevel": 50,
+  "movespeed": 335,
+  "armor": 36,
+  "armorperlevel": 4.7,
+  "spellblock": 30,
+  "spellblockperlevel": 2.05,
+  "attackrange": 200,
+  "hpregen": 3.5,
+  "hpregenperlevel": 0.85,
+  "mpregen": 8,
+  "mpregenperlevel": 0.8,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 65,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 2.5,
+  "attackspeed": 0.656
+ },
+ "basicAttack": {
+  "range": 200,
+  "attackSpeed": 0.656,
+  "asRatio": {
+   "baseValue": 0.656000018119812,
+   "__type": "ModifiableFloat"
+  }
+ },
+ "passive": {
+  "name": "Ionian Fervor",
+  "description": "When Irelia strikes enemies with spells she gains stacking bonus Attack Speed. At maximum stacks she also gains bonus damage on hit.",
+  "values": {
+   "IreliaPassive": {
+    "DataValues": {
+     "BuffDuration": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "MaxStacks": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "OnHitStructureMod": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "OnHitBaseDamage": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "OnHitPerLevel": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "calcs": {
+     "SingleStackAS": {
+      "mSimpleTooltipCalculationDisplay": 6,
+      "mFormulaParts": [
+       {
+        "mStartValue": 10,
+        "mEndValue": 25,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       }
+      ],
+      "mPrecision": 1,
+      "__type": "GameCalculation"
+     },
+     "OnHitBonus": {
+      "mSimpleTooltipCalculationDisplay": 6,
+      "mFormulaParts": [
+       {
+        "{91d404a5}": "OnHitBaseDamage",
+        "{b2cd0eb0}": "OnHitPerLevel",
+        "__type": "{b22609db}"
+       },
+       {
+        "mStat": 2,
+        "mStatFormula": 2,
+        "mCoefficient": 0.20000000298023224,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     }
+    },
+    "cooldown": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Bladesurge",
+   "description": "Irelia dashes forward to strike her target, healing herself. If the target is Marked or dies to Bladesurge, its cooldown refreshes.",
+   "tooltip": "Irelia dashes to an enemy, dealing <physicalDamage>{{ championdamage }} physical damage</physicalDamage> and restoring <healing>{{ healamount }} Health</healing> to herself. If the enemy dies or was <keywordMajor>Unsteady</keywordMajor>, the Cooldown is refreshed.<br /><br />Deals {{ miniondamage }} damage to minions.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    10,
+    9,
+    8,
+    7,
+    6
+   ],
+   "ddCost": [
+    15,
+    15,
+    15,
+    15,
+    15
+   ],
+   "ddRange": [
+    600,
+    600,
+    600,
+    600,
+    600
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown",
+     "Heal Ratio"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ healtadcoefficient*100.000000 }}% -> {{ healtadcoefficientnl*100.000000 }}%"
+    ]
+   },
+   "game": {
+    "IreliaQ": {
+     "DataValues": {
+      "BaseDamage": [
+       -15,
+       5,
+       25,
+       45,
+       65,
+       85,
+       105
+      ],
+      "DashSpeedBonus": [
+       0,
+       1400,
+       1400,
+       1400,
+       1400,
+       1400,
+       1400
+      ],
+      "HealTADCoefficient": [
+       0.07999999821186066,
+       0.09000000357627869,
+       0.10000000149011612,
+       0.10999999940395355,
+       0.11999999731779099,
+       0.12999999523162842,
+       0.14000000059604645
+      ]
+     },
+     "calcs": {
+      "ChampionDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mCoefficient": 0.800000011920929,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MinionDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mLevel1Value": 50,
+         "mInitialBonusPerLevel": 11,
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mCoefficient": 0.800000011920929,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "HealAmount": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mDataValue": "HealTADCoefficient",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      10,
+      10,
+      9,
+      8,
+      7,
+      6,
+      5
+     ],
+     "castRange": [
+      600,
+      600,
+      600,
+      600,
+      600,
+      600,
+      600
+     ],
+     "mana": [
+      15,
+      15,
+      15,
+      15,
+      15,
+      15
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "PositiveEffect_MoveBlock",
+      "Trait_DamageAbility",
+      "Trait_ActiveHeal",
+      "Trait_Strike",
+      "Trait_SignatureSpell"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Defiant Dance",
+   "description": "Irelia charges a strike that deals more damage as she charges. She takes reduced physical damage during the charge.",
+   "tooltip": "<charge>Begin Charging:</charge> Irelia enters a defensive stance for up to {{ maxduration }} seconds, becoming unable to act but reducing physical damage taken by {{ finalphysicaldr }}% and magic damage taken by {{ finalmagicdr }}%.<br /><br /><release>Release:</release> Irelia lashes out with her blades, dealing <physicalDamage>{{ mindamagecalc }} physical damage</physicalDamage> increased up to <physicalDamage>{{ maxdamagecalc }}</physicalDamage> based on charge time.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    20,
+    18,
+    16,
+    14,
+    12
+   ],
+   "ddCost": [
+    70,
+    75,
+    80,
+    85,
+    90
+   ],
+   "ddRange": [
+    825,
+    825,
+    825,
+    825,
+    825
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown",
+     "Mana Cost"
+    ],
+    "effect": [
+     "{{ mindamage }} -> {{ mindamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "IreliaW": {
+     "DataValues": {
+      "BasePhysicalDR": [
+       0,
+       50,
+       50,
+       50,
+       50,
+       50,
+       50
+      ],
+      "MaxDuration": [
+       0,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "MinDamage": [
+       0,
+       10,
+       20,
+       30,
+       40,
+       50,
+       60
+      ],
+      "MaxDamage": [
+       0,
+       30,
+       60,
+       90,
+       120,
+       150,
+       180
+      ],
+      "MaxBonusRatio": [
+       0,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "ChargeTimeForMax": [
+       0,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75
+      ],
+      "MRReductionAmount": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     "calcs": {
+      "FinalPhysicalDR": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mStartValue": 40,
+         "mEndValue": 70,
+         "__type": "ByCharLevelInterpolationCalculationPart"
+        },
+        {
+         "mCoefficient": 0.07999999821186066,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MinDamageCalc": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "MinDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mCoefficient": 0.4000000059604645,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mCoefficient": 0.5,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MaxDamageCalc": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "tooltipOnly": true,
+       "mFormulaParts": [
+        {
+         "mDataValue": "MaxDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mCoefficient": 1.2000000476837158,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mCoefficient": 1.5,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "FinalMagicDR": {
+       "mMultiplier": {
+        "mDataValue": "MRReductionAmount",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mModifiedGameCalculation": "FinalPhysicalDR",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      20,
+      20,
+      18,
+      16,
+      14,
+      12,
+      10
+     ],
+     "castRange": [
+      775,
+      775,
+      775,
+      775,
+      775,
+      775,
+      775
+     ],
+     "castRadius": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "mana": [
+      70,
+      75,
+      80,
+      85,
+      90,
+      90
+     ],
+     "missileSpeed": 0,
+     "channelDuration": [
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.5
+     ],
+     "lineWidth": 100,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_RecastOrReplaceSpell",
+      "Trait_Parry",
+      "Trait_Target_Directional",
+      "Trait_Melee_SmallWindup",
+      "Trait_Low_Damage",
+      "Trait_AoE"
+     ]
+    },
+    "IreliaW2": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "castRange": [
+      775,
+      775,
+      775,
+      775,
+      775,
+      775,
+      775
+     ],
+     "missileSpeed": 0,
+     "lineWidth": 120
+    },
+    "IreliaWDefense": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Flawless Duet",
+   "description": "Irelia sends out two blades which converge on each other. Enemies caught in between are damaged, stunned and Marked.",
+   "tooltip": "Irelia throws a blade into the ground and can <recast>Recast</recast> for up to {{ buffduration }} seconds. <br /><br /><recast>Recast:</recast> Irelia throws a second blade, then they fly towards each other <status>Stunning</status> for {{ stunduration }} seconds and dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage>. Champions and large jungle monsters become <keywordMajor>Unsteady</keywordMajor> for {{ markduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    16,
+    14.5,
+    13,
+    11.5,
+    10
+   ],
+   "ddCost": [
+    50,
+    50,
+    50,
+    50,
+    50
+   ],
+   "ddRange": [
+    850,
+    850,
+    850,
+    850,
+    850
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "IreliaE": {
+     "DataValues": {
+      "BaseDamage": [
+       30,
+       70,
+       110,
+       150,
+       190,
+       230,
+       270
+      ],
+      "StunDuration": [
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75
+      ],
+      "RevTime": [
+       0,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355,
+       0.3499999940395355
+      ],
+      "BuffDuration": [
+       0,
+       3.5,
+       3.5,
+       3.5,
+       3.5,
+       3.5,
+       3.5
+      ],
+      "CDBetweenCast": [
+       0,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25
+      ],
+      "MaxRange": [
+       0,
+       775,
+       775,
+       775,
+       775,
+       775,
+       775
+      ],
+      "MinRange": [
+       0,
+       50,
+       50,
+       50,
+       50,
+       50,
+       50
+      ],
+      "MarkDuration": [
+       0,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "APRatio": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      16,
+      16,
+      14.5,
+      13,
+      11.5,
+      10,
+      10
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "mana": [
+      50,
+      50,
+      50,
+      50,
+      50,
+      50
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_ImmobilizingCCSpell",
+      "Trait_DamageAbility",
+      "Trait_RecastOrReplaceSpell",
+      "Trait_Low_Damage",
+      "Trait_AoE"
+     ]
+    },
+    "IreliaE2": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_FreeRecast"
+     ]
+    },
+    "IreliaEMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "missileSpeed": 2000,
+     "lineWidth": 90
+    },
+    "IreliaEParticleMissile": {
+     "DataValues": {},
+     "calcs": {},
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "missileSpeed": 2000
+    },
+    "IreliaESecondary": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "missileSpeed": 1000,
+     "lineWidth": 70
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Vanguard's Edge",
+   "description": "Irelia fires a massive number of blades that explode outward upon hitting an enemy champion. Enemies hit by the blades are damaged and Marked. Afterwards the blades form a wall that will damage and slow enemies that walk through it.",
+   "tooltip": "Irelia launches a barrage of blades, dealing <magicDamage>{{ missiledamage }} magic damage</magicDamage> and making champions and large jungle monsters <keywordMajor>Unsteady</keywordMajor> for {{ markduration }} seconds. The barrage explodes into a cage around the first champion hit for {{ zoneduration }} seconds. The cage deals <magicDamage>{{ zonedamage }} magic damage</magicDamage> and <status>Slows</status> by {{ slowamount }}% for {{ ccduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    125,
+    105,
+    85
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    950,
+    950,
+    950
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Wall Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basemissiledamage }} -> {{ basemissiledamageNL }}",
+     "{{ basezonedamage }} -> {{ basezonedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "IreliaR": {
+     "DataValues": {
+      "BaseMissileDamage": [
+       50,
+       125,
+       200,
+       275,
+       350,
+       425,
+       500
+      ],
+      "BaseZoneDamage": [
+       50,
+       125,
+       200,
+       275,
+       350,
+       425,
+       500
+      ],
+      "CCDuration": [
+       0,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ],
+      "SlowAmount": [
+       0,
+       90,
+       90,
+       90,
+       90,
+       90,
+       90
+      ],
+      "MarkDuration": [
+       0,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "ZoneDuration": [
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5,
+       2.5
+      ],
+      "CooldownAmount": [
+       0,
+       0.5,
+       1,
+       1.5,
+       2,
+       2.5,
+       3
+      ],
+      "APRatio": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "MissileDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseMissileDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "ZoneDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseZoneDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "APRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      125,
+      125,
+      105,
+      85,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 2000,
+     "lineWidth": 160,
+     "ammoRechargeTime": [
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1
+     ],
+     "tags": [
+      "Trait_Ultimate",
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    },
+    "IreliaR2": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "castRange": [
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000,
+      25000
+     ],
+     "missileSpeed": 0,
+     "lineWidth": 150
+    },
+    "IreliaRDisarm": {
+     "buff": true
+    }
+   }
+  }
+ ]
+}

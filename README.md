@@ -2,7 +2,7 @@
 
 A 3v3 browser MOBA modeled on the lane-pushing mechanics of League of Legends. Plain TypeScript + Canvas, built with Vite.
 
-This is an original game: the champions, abilities, items, art and code are all new. It contains no Riot Games code, assets, names or data. Mechanics were modeled from publicly documented game behaviour; see [docs/MECHANICS.md](docs/MECHANICS.md).
+The 20 champions use real League of Legends names, text and numbers taken from Riot Data Dragon and the CommunityDragon client export; see [docs/CHAMPIONS.md](docs/CHAMPIONS.md) for sources and what is approximated. Items, maps, art and code are original. Not endorsed by Riot Games. Mechanics were modeled from publicly documented game behaviour; see [docs/MECHANICS.md](docs/MECHANICS.md).
 
 ## Play
 

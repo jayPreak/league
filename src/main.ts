@@ -45,6 +45,10 @@ import type { MatchInfo, Mode } from './mm';
 import type { BurstOpts, Particle } from './fx';
 import { beginDecals, canvas3d, endDecals, HK, K, loadModels, minimapCanvas, renderPortraits, renderWorld, resetUnits, syncUnits, unitHeight } from './world3d';
 import type { AbilityDef, ChampDef, DifficultyDef, DmgType, Side, Team, Vec } from './data';
+import { KITS, setKitApi } from './kits';
+import type { KApi } from './kits/types';
+import { REF, evalCalc, dataValue } from './champions/ref';
+export type { Unit, Champ, Proj };
 
 // ================= types =================
 type Kind = 'champ' | 'minion' | 'tower' | 'nexus' | 'monster' | 'ward';
@@ -72,6 +76,9 @@ interface Dash {
   a: AbilityDef | null;
   hit: Set<Unit>;
   land?: number; // damage dealt in an area when the dash ends
+  cb?: (e: Unit) => void; // kit hook: called once per enemy passed through
+  end?: () => void; // kit hook: called when the dash finishes
+  hitR?: number;
 }
 type Order = { type: 'move'; x: number; y: number } | { type: 'attack'; target: Unit };
 interface Champ {
@@ -107,6 +114,8 @@ interface Champ {
   emberT: number;
   wards: number; // trinket charges
   wardCd: number;
+  st: Record<string, any>; // per-kit state (stacks, timers, recast data)
+  rc: number[]; // recast windows per slot (seconds left)
 }
 interface Unit {
   id: number;
@@ -170,6 +179,40 @@ interface Unit {
   heat: number; // turret warm-up against champions
   plates: number; // outer turret plating left
   life: number; // wards: seconds left
+  // status effects added for the real-champion kits
+  untargT: number; // untargetable (but visible)
+  silenceT: number; // cannot cast
+  charmT: number; // walks toward charmSrc
+  charmSrc: Unit | null;
+  drPct: number; // damage reduction fraction while drT > 0
+  drT: number;
+  shredPct: number; // armor reduction fraction while shredT > 0
+  shredT: number;
+  rangeBonus: number; // added to attack range
+  asRed: number; // attack speed reduction fraction while asRedT > 0
+  asRedT: number;
+  unslow: number; // immune to slows while > 0
+  dots: Dot[];
+  marks: Record<string, Mark>;
+  petOwner: Unit | null; // summoned packmates / bear: follows and fights for its owner
+  petLife: number;
+}
+interface Dot {
+  src: Unit;
+  dps: number;
+  t: number;
+  acc: number;
+  type: DmgType;
+  tag: string;
+}
+interface Mark {
+  t: number;
+  v: number;
+  src: Unit | null;
+}
+interface KFx {
+  t: number;
+  fn: (dt: number, left: number) => boolean | void;
 }
 interface Zone {
   x: number;
@@ -208,6 +251,10 @@ interface Proj {
   color: string;
   done: boolean;
   a?: AbilityDef; // champion skillshots carry their ability for crowd control
+  cb?: (e: Unit, p: Proj) => void; // kit hook: replaces the default hit
+  onEnd?: (p: Proj) => void;
+  maxHits?: number;
+  ended?: boolean;
 }
 interface Pending {
   t: number;
@@ -239,6 +286,7 @@ interface Game {
   units: Unit[];
   projs: Proj[];
   pending: Pending[];
+  kfx: KFx[];
   zones: Zone[];
   camps: CampState[];
   drakes: [number, number];
@@ -419,6 +467,22 @@ function makeUnit(p: Partial<Unit> & Pick<Unit, 'kind' | 'team' | 'x' | 'y'>): U
     reviveT: 0,
     act: '',
     actN: 0,
+    untargT: 0,
+    silenceT: 0,
+    charmT: 0,
+    charmSrc: null,
+    drPct: 0,
+    drT: 0,
+    shredPct: 0,
+    shredT: 0,
+    rangeBonus: 0,
+    asRed: 0,
+    asRedT: 0,
+    unslow: 0,
+    dots: [],
+    marks: {},
+    petOwner: null,
+    petLife: 0,
     ...p,
   };
 }
@@ -427,12 +491,14 @@ function recalc(u: Unit) {
   const c = u.champ!;
   const d = c.def;
   const L = c.level - 1;
-  let hp = d.hp + d.hpL * L;
-  let ad = d.ad + d.adL * L;
+  // League's stat growth curve: base + g * (n-1) * (0.7025 + 0.0175 * (n-1))
+  const gr = (g: number) => g * L * (0.7025 + 0.0175 * L);
+  let hp = d.hp + gr(d.hpL);
+  let ad = d.ad + gr(d.adL);
   let ap = 0;
-  let armor = d.armor + d.armorL * L;
-  let mr = d.mr + d.mrL * L;
-  let asBonus = d.asL * L;
+  let armor = d.armor + gr(d.armorL);
+  let mr = d.mr + gr(d.mrL);
+  let asBonus = gr(d.asL);
   let ms = d.ms;
   let haste = 0;
   let ls = 0;
@@ -449,7 +515,12 @@ function recalc(u: Unit) {
     ls += it.ls ?? 0;
   }
   const oldMp = u.maxMp;
-  u.maxMp = d.mp + d.mpL * L;
+  u.maxMp = d.mp + gr(d.mpL);
+  // bonus stats (total minus base) feed the ability ratios
+  c.st.baseAd = d.ad + gr(d.adL);
+  c.st.baseArmor = d.armor + gr(d.armorL);
+  c.st.baseMr = d.mr + gr(d.mrL);
+  c.st.baseHp = d.hp + gr(d.hpL);
   u.mp = oldMp > 0 ? Math.min(u.maxMp, u.mp + Math.max(0, u.maxMp - oldMp)) : u.maxMp;
   const old = u.maxHp;
   u.maxHp = hp;
@@ -462,6 +533,7 @@ function recalc(u: Unit) {
   u.ms = ms;
   u.range = d.range;
   c.haste = haste;
+  KITS[d.id]?.passive?.recalc?.(u);
   c.ls = ls;
 }
 
@@ -511,6 +583,8 @@ function makeChamp(def: ChampDef, team: Team, role: Role, isPlayer: boolean): Un
     emberT: 0,
     wards: 2,
     wardCd: 0,
+    st: {},
+    rc: [0, 0, 0, 0],
   };
   u.maxHp = 0;
   recalc(u);
@@ -667,6 +741,7 @@ function newGame(champId: string, humans: Human[] = []) {
     units,
     projs: [],
     pending: [],
+    kfx: [],
     zones: [],
     camps: [],
     drakes: [0, 0],
@@ -696,7 +771,7 @@ function newGame(champId: string, humans: Human[] = []) {
 
 // ================= combat =================
 function targetable(t: Unit): boolean {
-  if (t.dead || t.stealthT > 0) return false;
+  if (t.dead || t.stealthT > 0 || t.untargT > 0) return false;
   if (t.kind === 'tower' || t.kind === 'nexus') return G.open.has(t);
   return true;
 }
@@ -717,11 +792,11 @@ function refreshOpenStructures() {
   }
 }
 
-const effAS = (u: Unit) => Math.min(2.5, u.as * (1 + (u.champ?.buffs.reduce((s, b) => s + b.as, 0) ?? 0)));
+const effAS = (u: Unit) => Math.min(2.5, u.as * (1 + (u.champ?.buffs.reduce((s, b) => s + b.as, 0) ?? 0)) * (u.asRedT > 0 ? 1 - u.asRed : 1));
 function effMS(u: Unit): number {
   if (u.stunT > 0 || u.rootT > 0) return 0;
   let ms = u.ms * (1 + (u.champ?.buffs.reduce((s, b) => s + b.ms, 0) ?? 0));
-  if (u.slowT > 0) ms *= 1 - u.slowAmt;
+  if (u.slowT > 0 && u.unslow <= 0) ms *= 1 - u.slowAmt;
   return ms;
 }
 
@@ -785,9 +860,14 @@ function announce(text: string, tone: 'good' | 'bad' | 'neutral', sub = '') {
 }
 let announceTimer = 0;
 
-function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType): number {
+type DmgFrom = 'attack' | 'spell' | 'dot';
+function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFrom = 'spell'): number {
   if (!targetable(t) || amt <= 0) return 0;
-  const res = type === 'phys' ? t.armor : type === 'magic' ? t.mr : 0;
+  if (t.champ) amt = KITS[t.champ.def.id]?.passive?.onTaken?.(t, src, amt, type) ?? amt;
+  let res = type === 'phys' ? t.armor : type === 'magic' ? t.mr : 0;
+  if (type === 'phys' && t.shredT > 0) res *= 1 - t.shredPct;
+  if (type === 'phys' && src.champ) res *= 1 - (KITS[src.champ.def.id]?.passive?.armorPen?.(src, t) ?? 0);
+  if (t.drT > 0) amt *= 1 - t.drPct;
   let mult = src.champ ? diffOf(src).dmg : 1;
   // Storm Drake: each drake the team owns adds 5% damage
   if (src.champ && src.team < 2) mult *= 1 + 0.05 * G.drakes[src.team as Team];
@@ -796,6 +876,18 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType): number {
   if (src.kind === 'minion' && colossusOn(src.team) && G.units.some((c) => c.champ && !c.dead && c.team === src.team && dist(c, src) < 900)) mult *= 1.5;
   if (t.kind === 'minion' && colossusOn(t.team) && G.units.some((c) => c.champ && !c.dead && c.team === t.team && dist(c, t) < 900)) mult *= 0.6;
   const dmg = amt * mult * (100 / (100 + Math.max(0, res)));
+  if (src.champ && dmg > 0) KITS[src.champ.def.id]?.passive?.onDealt?.(src, t, dmg, type, from);
+  if (dmg > 0 && from !== 'dot') {
+    // Molten Shield: attackers are burned
+    const rf = t.marks.reflect;
+    if (rf?.src && src.team !== t.team && src.kind !== 'tower' && !src.dead) dealDamage(rf.src, src, rf.v, 'magic', 'dot');
+    // Sunlight: an ally's damage cashes in the mark
+    const sun = t.marks.sun;
+    if (sun?.src && src.champ && src !== sun.src && src.team === sun.src.team) {
+      delete t.marks.sun;
+      dealDamage(sun.src, t, sun.v, 'magic', 'dot');
+    }
+  }
   const soak = Math.min(t.shield, dmg);
   t.shield -= soak;
   t.hp -= dmg - soak;
@@ -967,13 +1059,16 @@ function kill(t: Unit, src: Unit) {
     for (const [d, time] of t.champ.damagers) if (G.t - time < 10 && time > best) [best, killer] = [time, d];
   }
   const foes = G.units.filter((c) => c.champ && !c.dead && c.team !== t.team && dist(c, t) < 1400);
+  if (t.champ && t.kind === 'champ') {
+    for (const [d, time] of t.champ.damagers) if (d.champ && G.t - time < 10) KITS[d.champ.def.id]?.passive?.onKill?.(d, t, d !== src);
+  } else if (src.champ && t.kind !== 'ward') KITS[src.champ.def.id]?.passive?.onLastHit?.(src, t);
 
   deathFx(t);
   if (t.kind === 'monster') {
     monsterKilled(t, killer);
     return;
   }
-  if (t.kind === 'ward') return;
+  if (t.kind === 'ward' || t.petOwner) return;
   // champions drop their jungle blessings to whoever kills them
   if (t.champ && killer?.champ) {
     if (t.champ.azureT > 0) killer.champ.azureT = Math.max(killer.champ.azureT, t.champ.azureT);
@@ -1061,7 +1156,7 @@ function performAttack(u: Unit, t: Unit) {
     dmg = t.maxHp * (t.mtype === 'super' ? 0.07 : t.mtype === 'siege' ? 0.14 : t.mtype === 'caster' ? 0.7 : 0.45);
     type = 'true';
   }
-  if (u.kind === 'minion' && t.kind === 'champ') dmg *= 0.6;
+  if (u.kind === 'minion' && t.kind === 'champ' && !u.petOwner) dmg *= 0.6;
   if (u.kind === 'tower' && t.kind === 'champ') {
     dmg *= 1 + u.heat;
     u.heat = Math.min(1.2, u.heat + 0.4); // turret warm-up: +40% per consecutive shot on a champion
@@ -1109,7 +1204,8 @@ function performAttack(u: Unit, t: Unit) {
 
 function applyAuto(u: Unit, t: Unit, dmg: number, type: DmgType) {
   const emp = u.champ?.empower;
-  const done = dealDamage(u, t, dmg, type);
+  const done = dealDamage(u, t, dmg, type, 'attack');
+  if (u.champ) KITS[u.champ.def.id]?.passive?.onAttack?.(u, t, done);
   // Ember blessing: attacks burn and slow
   if (u.champ && u.champ.emberT > 0 && !t.dead && (t.kind === 'champ' || t.kind === 'monster' || t.kind === 'minion')) {
     dealDamage(u, t, 8 + 2 * u.champ.level, 'true');
@@ -1133,7 +1229,7 @@ function tryAttack(u: Unit, t: Unit) {
   u.atkCd = 1 / effAS(u);
 }
 
-const inRange = (u: Unit, t: Unit) => dist(u, t) <= u.range + u.r + t.r;
+const inRange = (u: Unit, t: Unit) => dist(u, t) <= u.range + u.rangeBonus + u.r + t.r;
 
 // Walks toward (x, y), routing around jungle walls with A* when there's no straight line.
 function moveToward(u: Unit, x: number, y: number, dt: number, speedMul = 1): boolean {
@@ -1244,9 +1340,53 @@ function enemiesIn(team: Side, test: (e: Unit) => boolean): Unit[] {
   return G.units.filter((e) => e.team !== team && (e.kind === 'champ' || e.kind === 'minion' || e.kind === 'monster') && targetable(e) && test(e));
 }
 
+const costOf = (c: Champ, slot: number) => {
+  const a = c.def.abilities[slot];
+  return a.costs ? a.costs[Math.max(0, Math.min(a.costs.length - 1, c.ranks[slot] - 1))] : a.cost;
+};
+// Real-champion abilities: numbers from the reference data, behaviour from src/kits.
+function castKit(u: Unit, slot: number, tx: number, ty: number): boolean {
+  const c = u.champ!;
+  const a = c.def.abilities[slot];
+  const kit = KITS[c.def.id];
+  const recast = c.rc[slot] > 0;
+  if (u.dead || u.stunT > 0 || u.silenceT > 0 || u.charmT > 0 || c.dash) return false;
+  if (!recast && (c.cds[slot] > 0 || c.ranks[slot] === 0 || u.mp < costOf(c, slot))) return false;
+  const handler = kit?.cast[slot];
+  if (!handler) return false;
+  const dx = tx - u.x;
+  const dy = ty - u.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const rank = Math.max(1, c.ranks[slot]);
+  u.stealthT = 0; // casting breaks camouflage; kits that grant it set it again
+  const res = handler({ u, c, slot, rank, a, tx, ty, nx: dx / d, ny: dy / d, d, recast });
+  if (res === false) return false; // handler refused (no valid target): nothing spent
+  if (!recast && !(res && (res as any).free)) {
+    u.mp -= costOf(c, slot);
+    u.revealT = 1.2;
+    c.recallT = 0;
+  }
+  u.act = `cast${slot}`;
+  u.actN++;
+  sfx(({ bolt: 'bolt', nova: 'nova', dash: 'dash', buff: 'buff', beam: 'beamCharge', zone: 'nova', ally: 'buff' } as const)[a.kind], u, u === G.player ? 1 : 0.6);
+  if (res && res.recast) {
+    c.rc[slot] = res.recast;
+    // keepCd: the cooldown already runs while the recast window is open (Zed's shadows, Ahri's dashes)
+    c.st['keepCd' + slot] = !!res.keepCd;
+    c.cds[slot] = res.keepCd ? (res.cd ?? cdOf(c, slot)) : 0.25;
+  } else {
+    c.rc[slot] = 0;
+    if (c.st['keepCd' + slot]) c.st['keepCd' + slot] = false; // cooldown has been running since the first cast
+    else c.cds[slot] = res && res.cd !== undefined ? res.cd : cdOf(c, slot);
+  }
+  KITS[c.def.id]?.passive?.onCast?.(u, slot);
+  return true;
+}
+
 function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
   const c = u.champ!;
   const a = c.def.abilities[slot];
+  if (a.script) return castKit(u, slot, tx, ty);
   if (u.dead || u.stunT > 0 || c.cds[slot] > 0 || c.dash) return false;
   if (c.ranks[slot] === 0 || u.mp < a.cost) return false;
   u.mp -= a.cost;
@@ -1430,8 +1570,234 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
   return true;
 }
 // each rank shaves 6% off the cooldown
-const cdOf = (c: Champ, slot: number) => c.def.abilities[slot].cd * (1 - 0.06 * Math.max(0, c.ranks[slot] - 1)) * (100 / (100 + c.haste + (c.azureT > 0 ? 20 : 0)));
+const cdOf = (c: Champ, slot: number) => {
+  const a = c.def.abilities[slot];
+  const base = a.cds ? a.cds[Math.max(0, Math.min(a.cds.length - 1, c.ranks[slot] - 1))] : a.cd * (1 - 0.06 * Math.max(0, c.ranks[slot] - 1));
+  return base * (100 / (100 + c.haste + (c.azureT > 0 ? 20 : 0)));
+};
 const beams: { sx: number; sy: number; ex: number; ey: number; w: number; t: number; color: string }[] = [];
+
+
+// ================= kit API: what src/kits may do to the game =================
+function statCtx(u: Unit): import('./champions/ref').StatCtx {
+  const c = u.champ!;
+  return {
+    level: c.level,
+    ap: u.ap,
+    ad: u.ad,
+    bonusAd: Math.max(0, u.ad - c.st.baseAd),
+    armor: u.armor,
+    bonusArmor: Math.max(0, u.armor - c.st.baseArmor),
+    mr: u.mr,
+    bonusMr: Math.max(0, u.mr - c.st.baseMr),
+    maxHp: u.maxHp,
+    bonusHp: Math.max(0, u.maxHp - c.st.baseHp),
+    hp: u.hp,
+    mana: u.mp,
+    maxMana: u.maxMp,
+  };
+}
+const gameSpell = (u: Unit, slot: number, key?: string) => {
+  const sp = REF[u.champ!.def.id].spells[slot];
+  const k = key ?? Object.keys(sp.game)[0];
+  const g = sp.game[k];
+  if (!g || (g as any).buff || !(g as any).DataValues) throw new Error(`no data: ${u.champ!.def.id} ${'QWER'[slot]} ${k}`);
+  return g as import('./champions/ref').RefGameSpell;
+};
+const passiveSpell = (u: Unit, key?: string) => {
+  const vals = REF[u.champ!.def.id].passive.values;
+  const k = key ?? Object.keys(vals ?? {})[0];
+  const g = vals?.[k];
+  if (!g) throw new Error(`no passive data: ${u.champ!.def.id} ${k}`);
+  return g;
+};
+const rankOf = (u: Unit, slot: number) => Math.max(1, u.champ!.ranks[slot]);
+const kitApi: KApi = {
+  dist,
+  clamp,
+  time: () => (G ? G.t : 0),
+  rand: Math.random,
+  dmg: (src, t, amt, type, from = 'spell') => dealDamage(src, t, amt, type, from),
+  heal,
+  shield: giveShield,
+  foes: (u, test = () => true) => enemiesIn(u.team, test),
+  allies: (u, radius = 1e9, includeSelf = true) =>
+    G.units.filter((a) => !a.dead && a.team === u.team && a.kind === 'champ' && (includeSelf || a !== u) && dist(a, u) <= radius),
+  units: () => G.units,
+  nearestFoe: (u, r, pred = () => true) => nearestEnemy(u, r, pred),
+  pick: (u, tx, ty, range, grab = 160, pred = () => true) => {
+    let best: Unit | null = null;
+    let bd = grab;
+    for (const e of enemiesIn(u.team, (e) => pred(e) && dist(u, e) <= range + e.r)) {
+      const d = Math.hypot(e.x - tx, e.y - ty) - e.r;
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    return best;
+  },
+  pickAlly: (u, tx, ty, range, grab = 220, includeSelf = true) => {
+    let best: Unit | null = null;
+    let bd = grab;
+    for (const a of G.units) {
+      if (a.dead || a.team !== u.team || a.kind !== 'champ' || (!includeSelf && a === u) || dist(u, a) > range) continue;
+      const d = Math.hypot(a.x - tx, a.y - ty);
+      if (d < bd) {
+        bd = d;
+        best = a;
+      }
+    }
+    return best;
+  },
+  v: (u, slot, name, key) => dataValue(gameSpell(u, slot, key), name, rankOf(u, slot)),
+  calc: (u, slot, name, key) => evalCalc(gameSpell(u, slot, key), name, rankOf(u, slot), statCtx(u)),
+  pv: (u, name, key, rank = 1) => dataValue(passiveSpell(u, key), name, rank),
+  pcalc: (u, name, key, rank = 1) => evalCalc(passiveSpell(u, key), name, rank, statCtx(u)),
+  ctx: statCtx,
+  cc: (e, o) => {
+    if (e.kind === 'tower' || e.kind === 'nexus' || e.kind === 'ward') return;
+    if (o.slow) {
+      e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, o.slow);
+      e.slowT = Math.max(e.slowT, o.slowT ?? 1);
+    }
+    if (o.stun) e.stunT = Math.max(e.stunT, o.stun);
+    if (o.root) e.rootT = Math.max(e.rootT, o.root);
+    if (o.air) {
+      e.stunT = Math.max(e.stunT, o.air);
+      e.airT = Math.max(e.airT, o.air);
+    }
+    if (o.silence) e.silenceT = Math.max(e.silenceT, o.silence);
+    if (o.charm && o.src) {
+      e.charmT = Math.max(e.charmT, o.charm);
+      e.charmSrc = o.src;
+    }
+    if (o.pull) e.push = { tx: o.pull.x, ty: o.pull.y, speed: o.pullSpeed ?? 1800 };
+    if (o.knock) {
+      const d = dist(e, o.knock.from) || 1;
+      e.push = {
+        tx: clamp(e.x + ((e.x - o.knock.from.x) / d) * o.knock.dist, 40, MAP - 40),
+        ty: clamp(e.y + ((e.y - o.knock.from.y) / d) * o.knock.dist, 40, MAP - 40),
+        speed: o.knock.speed ?? 1400,
+      };
+    }
+    if (e.champ?.dash && (o.stun || o.air || o.pull || o.knock || o.charm)) e.champ.dash = null;
+  },
+  dot: (src, t, dps, secs, type, tag) => {
+    const ex = t.dots.find((d) => d.tag === tag && d.src === src);
+    if (ex) {
+      ex.dps = dps;
+      ex.t = secs;
+    } else t.dots.push({ src, dps, t: secs, acc: 0, type, tag });
+  },
+  mark: (t, key, secs, v = 1, src = null) => {
+    t.marks[key] = { t: secs, v, src };
+  },
+  markOf: (t, key) => t.marks[key],
+  proj: (o) => {
+    const len = Math.hypot(o.nx, o.ny) || 1;
+    G.projs.push({
+      homing: o.homing ?? null,
+      x: o.from?.x ?? o.u.x,
+      y: o.from?.y ?? o.u.y,
+      dx: o.nx / len,
+      dy: o.ny / len,
+      speed: o.speed,
+      traveled: 0,
+      max: o.range,
+      width: o.width,
+      owner: o.u,
+      team: o.u.team,
+      dmg: 0,
+      dmgType: 'magic',
+      pierce: !!o.pierce,
+      hit: new Set(),
+      slow: 0,
+      slowT: 0,
+      stun: 0,
+      champOnly: !!o.champOnly,
+      color: o.color,
+      done: false,
+      cb: o.cb,
+      onEnd: o.onEnd,
+      maxHits: o.maxHits,
+    });
+    return G.projs[G.projs.length - 1];
+  },
+  later: (secs, fn) => {
+    G.kfx.push({ t: secs, fn: (_dt, left) => { if (left <= 0) fn(); } });
+  },
+  every: (secs, fn) => {
+    G.kfx.push({ t: secs, fn });
+  },
+  teleCircle: (x, y, r, color, secs, fn) => {
+    G.pending.push({ t: secs, total: secs, fn, draw: (ctx, k) => drawNovaTele(ctx, x, y, r, color, k), tele: ['n', r1(x), r1(y), r, color, 0] });
+  },
+  teleLine: (sx, sy, ex, ey, w, color, secs, fn) => {
+    G.pending.push({ t: secs, total: secs, fn, draw: (ctx, k) => drawBeamTele(ctx, sx, sy, ex, ey, w, color, k), tele: ['b', r1(sx), r1(sy), r1(ex), r1(ey), w, color] });
+  },
+  dash: (u, tx, ty, speed, o = {}) => {
+    u.champ!.dash = { tx: clamp(tx, 40, MAP - 40), ty: clamp(ty, 40, MAP - 40), speed, dmg: 0, a: null, hit: new Set(), cb: o.cb, end: o.end, hitR: o.hitR };
+    if (onScreen(u)) {
+      burst(u.x, u.y, 6, { kind: 'smoke', color: '#8b8f96', speed: 80, life: 0.4, size: 9, grow: 26 });
+    }
+  },
+  blink: (u, tx, ty) => {
+    if (onScreen(u)) burst(u.x, u.y, 12, { color: '#ffffff', speed: 300, life: 0.3, size: 3 });
+    u.x = clamp(tx, 40, MAP - 40);
+    u.y = clamp(ty, 40, MAP - 40);
+    pushOut(u);
+    if (onScreen(u)) ring(u.x, u.y, 70, '#ffffff', 0.3, 5);
+  },
+  isWall: (x, y) => isWall(x, y),
+  ring,
+  burst,
+  trauma: (at, amt) => trauma(at, amt),
+  text: (u, str, color = '#ffffff') => addText(u.x, u.y - 60, str, color, 14),
+  pet: (owner, o) => {
+    const p = makeUnit({
+      kind: 'minion',
+      team: owner.team,
+      x: o.x,
+      y: o.y,
+      r: o.r ?? 18,
+      hp: o.hp,
+      maxHp: o.hp,
+      ad: o.ad,
+      armor: o.armor ?? 0,
+      mr: o.mr ?? 0,
+      range: o.range,
+      as: o.as,
+      ms: o.ms,
+      mtype: 'melee',
+      name: o.name,
+      fadeIn: 0.3,
+      petOwner: owner,
+      petLife: o.life,
+    });
+    G.units.push(p);
+    return p;
+  },
+  remove: (u) => {
+    u.dead = true;
+    u.hp = 0;
+  },
+  costOf: (u, slot) => costOf(u.champ!, slot),
+  cdOf: (u, slot) => cdOf(u.champ!, slot),
+  refundCd: (u, slot, secs) => {
+    u.champ!.cds[slot] = Math.max(0, u.champ!.cds[slot] - secs);
+  },
+  setCd: (u, slot, secs) => {
+    u.champ!.cds[slot] = secs;
+  },
+  rankOf,
+  recalc,
+  effAS,
+  addBuff: (u, as, ms, t) => {
+    u.champ!.buffs.push({ as, ms, t });
+  },
+};
+setKitApi(kitApi);
 
 function castFlash(u: Unit, tx: number, ty: number) {
   const c = u.champ!;
@@ -1515,7 +1881,30 @@ function spawnWave() {
   }
 }
 
+function updatePet(u: Unit, dt: number) {
+  const o = u.petOwner!;
+  if ((u.petLife -= dt) <= 0 || o.dead) {
+    u.dead = true;
+    u.hp = 0;
+    return;
+  }
+  if (u.stunT > 0) return;
+  let t = u.target && targetable(u.target) && dist(u, u.target) < 900 ? u.target : null;
+  const ot = o.champ?.order?.type === 'attack' ? o.champ.order.target : o.target;
+  if (ot && targetable(ot) && ot.team !== u.team && dist(o, ot) < 900) t = ot;
+  if (!t && (u.retarget -= dt) <= 0) {
+    u.retarget = 0.3;
+    t = nearestEnemy(o, 600, (e) => e.kind === 'champ' || e.kind === 'minion');
+  }
+  u.target = t;
+  if (t) {
+    if (inRange(u, t)) tryAttack(u, t);
+    else moveToward(u, t.x, t.y, dt, 1.15);
+  } else if (dist(u, o) > 160) moveToward(u, o.x, o.y, dt, 1.2);
+}
+
 function updateMinion(u: Unit, dt: number) {
+  if (u.petOwner) return updatePet(u, dt);
   if (u.stunT > 0) return;
   u.retarget -= dt;
   const t = u.target;
@@ -1574,7 +1963,16 @@ function updateChamp(u: Unit, dt: number) {
     c.wardCd = c.wards < 2 ? 120 : 0;
   }
   // Azure blessing: much faster mana regeneration (and ability haste, see cdOf)
-  u.mp = Math.min(u.maxMp, u.mp + (c.def.mpRegen * (1 + c.level * 0.06) + (c.azureT > 0 ? u.maxMp * 0.01 : 0)) * dt);
+  u.mp = Math.min(u.maxMp, u.mp + (c.def.mpRegen + (c.def.mpRegenL ?? 0) * (c.level - 1) + (c.azureT > 0 ? u.maxMp * 0.01 : 0)) * dt);
+  if (c.def.hpRegen) heal(u, ((c.def.hpRegen + (c.def.hpRegenL ?? 0) * (c.level - 1)) / 5) * dt);
+  for (let i = 0; i < 4; i++)
+    if (c.rc[i] > 0 && (c.rc[i] -= dt) <= 0) {
+      c.rc[i] = 0;
+      if (c.st['keepCd' + i]) c.st['keepCd' + i] = false;
+      else c.cds[i] = cdOf(c, i); // recast window closed: cooldown starts now
+      KITS[c.def.id]?.passive?.recastEnd?.(u, i);
+    }
+  KITS[c.def.id]?.passive?.tick?.(u, dt);
   if (u.revealT > 0) u.revealT -= dt;
   c.buffs = c.buffs.filter((b) => (b.t -= dt) > 0);
   if (c.recallT > 0) {
@@ -1605,6 +2003,12 @@ function updateChamp(u: Unit, dt: number) {
         hitEnemy(u, e, d.a, d.dmg, u);
       }
     }
+    if (d.cb) {
+      for (const e of enemiesIn(u.team, (e) => !d.hit.has(e) && dist(e, u) <= u.r + e.r + (d.hitR ?? 60))) {
+        d.hit.add(e);
+        d.cb(e);
+      }
+    }
     if (onScreen(u)) spawn({ kind: 'ghost', x: u.x, y: u.y, life: 0.22, size: u.r, color: c.def.color, drag: 0 });
     const step = d.speed * dt;
     const rem = Math.hypot(d.tx - u.x, d.ty - u.y);
@@ -1612,6 +2016,7 @@ function updateChamp(u: Unit, dt: number) {
       u.x = d.tx;
       u.y = d.ty;
       c.dash = null;
+      d.end?.();
       if (d.land && d.a) {
         const rad = d.a.landRadius ?? 250;
         for (const e of enemiesIn(u.team, (e) => dist(e, u) <= rad + e.r)) hitEnemy(u, e, d.a, d.land, u);
@@ -1636,7 +2041,7 @@ function updateChamp(u: Unit, dt: number) {
     }
     return;
   }
-  if (u.stunT > 0) return;
+  if (u.stunT > 0 || u.charmT > 0) return;
   if (!c.isPlayer) aiChamp(u, dt);
   else if (!c.order) {
     const t = nearestEnemy(u, u.range + u.r, () => true);
@@ -1703,9 +2108,9 @@ function laneFront(team: Side, lane: number): Vec {
 function aiCast(u: Unit, s: number, foe: Unit) {
   const c = u.champ!;
   const a = c.def.abilities[s];
-  if (c.cds[s] > 0 || c.ranks[s] === 0 || u.mp < a.cost) return;
+  if (c.cds[s] > 0 || c.ranks[s] === 0 || u.mp < costOf(c, s) || u.silenceT > 0) return;
   // keep enough mana for the ultimate when it is nearly up
-  if (s !== 3 && c.ranks[3] > 0 && c.cds[3] < 4 && u.mp - a.cost < c.def.abilities[3].cost) return;
+  if (s !== 3 && c.ranks[3] > 0 && c.cds[3] < 4 && u.mp - costOf(c, s) < costOf(c, 3)) return;
   if (Math.random() > diffOf(u).castChance) return;
   const d = dist(u, foe);
   const fp = foe.hp / foe.maxHp;
@@ -1752,7 +2157,7 @@ function aiCast(u: Unit, s: number, foe: Unit) {
 function aiUtility(u: Unit, foe: Unit | null) {
   const c = u.champ!;
   c.def.abilities.forEach((a, s) => {
-    if (c.cds[s] > 0 || c.ranks[s] === 0 || u.mp < a.cost) return;
+    if (c.cds[s] > 0 || c.ranks[s] === 0 || u.mp < costOf(c, s) || u.silenceT > 0) return;
     if (a.kind === 'ally' && a.heal) {
       if (G.units.some((al) => al.champ && !al.dead && al.team === u.team && dist(al, u) < (a.radius ?? 600) && al.hp / al.maxHp < 0.6)) cast(u, s, u.x, u.y);
     } else if (a.kind === 'ally' && foe && dist(u, foe) < 700) {
@@ -1761,7 +2166,7 @@ function aiUtility(u: Unit, foe: Unit | null) {
       // map-wide ultimates finish off low enemies anywhere
       const low = G.units.find((e) => e.champ && e.team !== u.team && targetable(e) && e.hp / e.maxHp < 0.3 && dist(e, u) <= a.range);
       if (low && Math.random() < 0.3) cast(u, s, low.x, low.y);
-    } else if (foe && s < 3 && (a.kind === 'bolt' || (a.kind === 'zone' && !a.allyHeal)) && u.mp > a.cost * 2.5 && Math.random() < 0.35) {
+    } else if (foe && s < 3 && (a.kind === 'bolt' || (a.kind === 'zone' && !a.allyHeal)) && u.mp > costOf(c, s) * 2.5 && Math.random() < 0.35) {
       aiCast(u, s, foe); // poke while trading in lane
     }
   });
@@ -1804,7 +2209,7 @@ function aiJungle(u: Unit) {
     if (c.spellCds[1] <= 0 && dist(u, target) < 500 && target.hp <= smiteDamage(u) && (big || u.hp / u.maxHp < 0.45 || c.level < 4)) castSmite(u, target);
     if (dist(u, target) < 700) for (let s = 0; s < 3; s++) {
       const a = c.def.abilities[s];
-      if (c.cds[s] <= 0 && c.ranks[s] > 0 && u.mp > a.cost * 2 && a.kind !== 'ally' && !(a.kind === 'buff' && a.stealth)) cast(u, s, target.x, target.y);
+      if (c.cds[s] <= 0 && c.ranks[s] > 0 && u.mp > costOf(c, s) * 2 && a.kind !== 'ally' && !(a.kind === 'buff' && a.stealth)) cast(u, s, target.x, target.y);
     }
     c.order = { type: 'attack', target };
     return;
@@ -2322,6 +2727,30 @@ function update(dt: number) {
     if (u.airT > 0) u.airT = Math.max(0, u.airT - dt);
     if (u.stealthT > 0) u.stealthT = Math.max(0, u.stealthT - dt);
     if (u.shieldT > 0 && (u.shieldT -= dt) <= 0) u.shield = 0;
+    if (u.untargT > 0) u.untargT = Math.max(0, u.untargT - dt);
+    if (u.asRedT > 0) u.asRedT = Math.max(0, u.asRedT - dt);
+    if (u.silenceT > 0) u.silenceT = Math.max(0, u.silenceT - dt);
+    if (u.drT > 0) u.drT = Math.max(0, u.drT - dt);
+    if (u.shredT > 0) u.shredT = Math.max(0, u.shredT - dt);
+    if (u.unslow > 0) u.unslow = Math.max(0, u.unslow - dt);
+    if (u.charmT > 0) {
+      u.charmT = Math.max(0, u.charmT - dt);
+      if (u.charmSrc && !u.charmSrc.dead && u.stunT <= 0 && dist(u, u.charmSrc) > u.charmSrc.r + u.r + 20) moveToward(u, u.charmSrc.x, u.charmSrc.y, dt, 0.8);
+    }
+    for (const k in u.marks) if ((u.marks[k].t -= dt) <= 0) delete u.marks[k];
+    if (u.dots.length) {
+      for (const dot of u.dots) {
+        dot.t -= dt;
+        dot.acc += dt;
+        if (dot.acc >= 0.5 || dot.t <= 0) {
+          const dur = dot.acc;
+          dot.acc = 0;
+          if (!dot.src.dead) dealDamage(dot.src, u, dot.dps * dur, dot.type, 'dot');
+        }
+      }
+      u.dots = u.dots.filter((d) => d.t > 0);
+      if (u.dead) continue;
+    }
     if (u.push) {
       const pu = u.push;
       const rem = Math.hypot(pu.tx - u.x, pu.ty - u.y);
@@ -2370,7 +2799,8 @@ function update(dt: number) {
       }
       const d = dist(p, t);
       if (d <= step + t.r * 0.5) {
-        applyAuto(p.owner, t, p.dmg, p.dmgType);
+        if (p.cb) p.cb(t, p);
+        else applyAuto(p.owner, t, p.dmg, p.dmgType);
         p.done = true;
       } else {
         p.x += ((t.x - p.x) / d) * step;
@@ -2387,7 +2817,8 @@ function update(dt: number) {
       if (e.kind !== 'champ' && (p.champOnly || (e.kind !== 'minion' && e.kind !== 'monster'))) continue;
       if (dist(p, e) > p.width / 2 + e.r) continue;
       p.hit.add(e);
-      if (p.a) hitEnemy(p.owner, e, p.a, p.dmg, p);
+      if (p.cb) p.cb(e, p);
+      else if (p.a) hitEnemy(p.owner, e, p.a, p.dmg, p);
       else {
         dealDamage(p.owner, e, p.dmg, p.dmgType);
         if (p.slow) {
@@ -2397,14 +2828,24 @@ function update(dt: number) {
         if (p.stun) e.stunT = Math.max(e.stunT, p.stun);
       }
       if (onScreen(e)) burst(e.x, e.y, 10, { kind: 'ember', color: p.color, speed: 300, life: 0.35, size: 4, drag: 5 });
-      if (!p.pierce) {
+      if (!p.pierce || (p.maxHits && p.hit.size >= p.maxHits)) {
         p.done = true;
         break;
       }
     }
     if (p.traveled >= p.max) p.done = true;
   }
+  for (const p of G.projs)
+    if (p.done && p.onEnd && !p.ended) {
+      p.ended = true;
+      p.onEnd(p);
+    }
   G.projs = G.projs.filter((p) => !p.done);
+  for (const f of G.kfx) {
+    f.t -= dt;
+    if (f.fn(dt, Math.max(0, f.t)) === false) f.t = 0;
+  }
+  G.kfx = G.kfx.filter((f) => f.t > 0);
 
   for (const pd of G.pending) pd.t -= dt;
   const fire = G.pending.filter((pd) => pd.t <= 0);
@@ -3005,17 +3446,17 @@ function buildHud() {
   slotEls = [];
   const keys = ['Q', 'W', 'E', 'R', 'D', 'F'];
   const defs = [
-    ...c.def.abilities.map((a) => ({ name: a.name, desc: a.desc, color: a.color, cd: a.cd })),
-    { name: 'Flash', desc: 'Blink a short distance.', color: '#fff6a8', cd: 180 },
+    ...c.def.abilities.map((a) => ({ name: a.name, desc: a.desc, color: a.color, cd: a.cds ? a.cds.join('/') : a.cd, extra: abilityCostText(c.def, a) })),
+    { name: 'Flash', desc: 'Blink a short distance.', color: '#fff6a8', cd: 180, extra: '' },
     c.spell2 === 'smite'
-      ? { name: 'Smite', desc: 'Deal heavy true damage to a monster or minion (hover it, or the nearest is chosen). Secures buffs and epic monsters.', color: '#ffcf6a', cd: 75 }
-      : { name: 'Heal', desc: 'Restore health and gain a burst of speed.', color: '#7dff9c', cd: 150 },
+      ? { name: 'Smite', desc: 'Deal heavy true damage to a monster or minion (hover it, or the nearest is chosen). Secures buffs and epic monsters.', color: '#ffcf6a', cd: 75, extra: '' }
+      : { name: 'Heal', desc: 'Restore health and gain a burst of speed.', color: '#7dff9c', cd: 150, extra: '' },
   ];
   defs.forEach((d, i) => {
     const el = document.createElement('div');
     el.className = 'slot' + (i > 3 ? ' spell' : '');
-    el.title = `${d.name} (${keys[i]}) — ${d.desc} Cooldown ${d.cd}s`;
-    const cost = i < 4 ? c.def.abilities[i].cost : 0;
+    el.title = `${d.name} (${keys[i]}) — ${d.desc} Cooldown ${d.cd}s${d.extra}${i === 0 && c.def.passive ? `\nPassive, ${c.def.passive.name}: ${c.def.passive.desc}` : ''}`;
+    const cost = i < 4 ? costOf(c, i) : 0;
     el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)">${i > 3 ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>${
       i < 4 ? `<span class="mana">${cost}</span><div class="pips"></div><button class="plus" title="Learn (Ctrl+${keys[i]})">+</button>` : ''
     }`;
@@ -3083,7 +3524,7 @@ function updateHud() {
     setText(s.cdt, 'cdt' + i, v > 0 ? String(Math.ceil(v)) : '');
     if (i < 4) {
       s.root.classList.toggle('locked', c.ranks[i] === 0);
-      s.root.classList.toggle('nomana', c.ranks[i] > 0 && P.mp < c.def.abilities[i].cost);
+      s.root.classList.toggle('nomana', c.ranks[i] > 0 && P.mp < costOf(c, i));
       s.root.classList.toggle('learn', canRank(c, i));
       const max = i === 3 ? 3 : 5;
       const pips = Array.from({ length: max }, (_, k) => `<i class="${k < c.ranks[i] ? 'on' : ''}"></i>`).join('');
@@ -3281,7 +3722,7 @@ window.addEventListener('keydown', (e) => {
       sfx('nope');
       const a = c.def.abilities[slot];
       if (c.ranks[slot] === 0) addText(P.x, P.y - 60, canRank(c, slot) ? 'Learn it first (Ctrl+key)' : slot === 3 ? 'Learn at level 6' : 'Not learned', '#aaa', 14);
-      else if (P.mp < a.cost && c.cds[slot] <= 0) addText(P.x, P.y - 60, 'Not enough mana', '#6fb0ff', 14);
+      else if (P.mp < costOf(c, slot) && c.cds[slot] <= 0) addText(P.x, P.y - 60, 'Not enough mana', '#6fb0ff', 14);
     }
     return;
   }
@@ -3401,7 +3842,7 @@ function touchCast(slot: number, at: Vec) {
     sfx('nope');
     const c = P.champ!;
     if (c.ranks[slot] === 0) addText(P.x, P.y - 60, canRank(c, slot) ? 'Tap + to learn it' : slot === 3 ? 'Learn at level 6' : 'Not learned', '#aaa', 14);
-    else if (P.mp < c.def.abilities[slot].cost && c.cds[slot] <= 0) addText(P.x, P.y - 60, 'Not enough mana', '#6fb0ff', 14);
+    else if (P.mp < costOf(c, slot) && c.cds[slot] <= 0) addText(P.x, P.y - 60, 'Not enough mana', '#6fb0ff', 14);
   }
 }
 
@@ -3604,7 +4045,7 @@ function updateTouchHud() {
     setText(b.cdt, 'tcd' + i, v > 0 ? String(Math.ceil(v)) : '');
     if (i < 4) {
       b.el!.classList.toggle('locked', c.ranks[i] === 0);
-      b.el!.classList.toggle('nomana', c.ranks[i] > 0 && P.mp < c.def.abilities[i].cost);
+      b.el!.classList.toggle('nomana', c.ranks[i] > 0 && P.mp < costOf(c, i));
       b.el!.classList.toggle('learn', canRank(c, i));
     }
   }
@@ -3714,7 +4155,7 @@ const remote = new Map<string, Unit>(); // host: each guest's champion
 const remoteUnits = () => [...remote.values()];
 const castReady = (u: Unit, slot: number) => {
   const c = u.champ!;
-  return !u.dead && u.stunT <= 0 && c.cds[slot] <= 0 && !c.dash && c.ranks[slot] > 0 && u.mp >= c.def.abilities[slot].cost;
+  return !u.dead && u.stunT <= 0 && c.cds[slot] <= 0 && !c.dash && c.ranks[slot] > 0 && u.mp >= costOf(c, slot);
 };
 
 // Every player action becomes a command: applied directly by the host, sent to the host by guests.
@@ -3972,7 +4413,7 @@ function applySnap(s: Snap) {
     if (!me) return;
     awaitingYou = 0;
     G = {
-      t: s.t, units, projs: [], pending: [], zones: [], camps: [], drakes: [0, 0], colossus: [0, 0], seen: [new Set(), new Set()], visionT: 0, platesGone: false, fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
+      t: s.t, units, projs: [], pending: [], kfx: [], zones: [], camps: [], drakes: [0, 0], colossus: [0, 0], seen: [new Set(), new Set()], visionT: 0, platesGone: false, fx: [], texts: [], nextWave: 0, waveNo: 0, over: null, kills: s.k,
       open: new Set(), player: me, cam: { x: me.x, y: me.y }, camLocked: true, zoom: TOUCH ? 0.7 : 0.62, marker: null, focus: null,
     };
     buildHud();
@@ -4655,6 +5096,11 @@ function buildDifficulty() {
     hostSync();
   });
 }
+const abilityCostText = (d: ChampDef, a: AbilityDef) => {
+  const t = (a.costType ?? 'Mana').replace(/\(.*\)/, '').trim();
+  if (!a.costs || a.costs.every((x) => x === 0)) return t === 'Mana' || t === 'No Cost' ? ' · No cost' : ` · ${t}`;
+  return ` · ${a.costs.join('/')} ${t === '{{ abilityresourcename }}' || !t ? d.resource ?? 'Mana' : t}`;
+};
 const CLASSES = ['All', 'Mage', 'Fighter', 'Tank', 'Assassin', 'Marksman', 'Support'];
 let champFilter = 'All';
 function champDetail(id: string) {
@@ -4665,9 +5111,12 @@ function champDetail(id: string) {
     return;
   }
   el.innerHTML = `<div class="dh"><h3>${c.name}</h3><span>${c.title ?? ''}</span></div>
-    <div class="role">${c.role} · ${c.ranged ? 'Ranged' : 'Melee'} · ${(c.tags ?? []).join(' / ')}</div>
-    <ul>${c.abilities
-      .map((a, i) => `<li><b>${'QWER'[i]}</b><div><strong>${a.name}</strong> <em>${a.cd}s · ${a.cost} mana</em><p>${a.desc}</p></div></li>`)
+    <div class="role">${c.role} · ${c.ranged ? 'Ranged' : 'Melee'} (${c.range}) · ${c.resource ?? 'Mana'}</div>
+    <div class="stats">HP ${c.hp}+${c.hpL} · AD ${c.ad}+${c.adL} · Armor ${c.armor}+${c.armorL} · MR ${c.mr}+${c.mrL} · AS ${c.as} · MS ${c.ms}</div>
+    <ul>${
+      c.passive ? `<li><b>P</b><div><strong>${c.passive.name}</strong><p>${c.passive.desc}</p></div></li>` : ''
+    }${c.abilities
+      .map((a, i) => `<li><b>${'QWER'[i]}</b><div><strong>${a.name}</strong> <em>${a.cds ? a.cds.join('/') : a.cd}s${abilityCostText(c, a)}</em><p>${a.desc}</p></div></li>`)
       .join('')}</ul>`;
 }
 function buildRoles() {
@@ -4889,3 +5338,8 @@ Object.assign(window, {
     updateHud();
   },
 });
+
+// dev-only handle for smoke-testing champion kits from the console
+if (import.meta.env.DEV) {
+  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf };
+}

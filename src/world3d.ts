@@ -483,21 +483,29 @@ const hero = (file: string, keep: string[], attack: string, abilities: string[],
   abilities,
   hue,
 });
+// Placeholder bodies: the CC0 KayKit models stand in for every champion; the hue tints each one.
+const MELEE = ['1H_Melee_Attack_Chop'];
 const HEROES: Record<string, HeroCfg> = {
-  gorvald: hero('Knight', ['1H_Sword', 'Rectangle_Shield'], '1H_Melee_Attack_Chop', ['Dodge_Forward', 'Cheer', '2H_Melee_Attack_Spin', 'Dodge_Forward']),
-  nyssa: hero('Rogue_Hooded', ['Knife', 'Knife_Offhand'], '1H_Melee_Attack_Chop', ['Dodge_Forward', 'Spellcast_Raise', '2H_Melee_Attack_Spin', 'Dodge_Forward'], '#6a3a9a'),
-  solenne: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Raise', 'Spellcast_Long'], '#ffd0ea'),
-  hollen: hero('Barbarian', ['1H_Axe', 'Barbarian_Round_Shield'], '1H_Melee_Attack_Chop', ['Throw', 'Cheer', '2H_Melee_Attack_Chop', 'Cheer'], '#5f8f4a'),
-  mirela: hero('Mage', ['2H_Staff'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Dodge_Forward', 'Spellcast_Long'], '#d84a2a'),
-  dunstan: hero('Knight', ['2H_Sword'], '2H_Melee_Attack_Chop', ['2H_Melee_Attack_Chop', 'Cheer', '2H_Melee_Attack_Spin', '2H_Melee_Attack_Chop'], '#d9a441'),
-  kestra: hero('Rogue', ['Knife', 'Knife_Offhand'], '1H_Melee_Attack_Chop', ['Dodge_Forward', 'Cheer', 'Spellcast_Raise', '2H_Melee_Attack_Spin'], '#d8345c'),
-  ferro: hero('Rogue_Hooded', ['2H_Crossbow'], '2H_Ranged_Shoot', ['2H_Ranged_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], '#3a9ad8'),
-  wren: hero('Rogue_Hooded', ['1H_Crossbow', 'Knife_Offhand'], '1H_Ranged_Shoot', ['1H_Ranged_Shoot', 'Throw', 'Dodge_Forward', 'Spellcast_Raise'], '#c8a440'),
-  ysolde: hero('Mage', ['Spellbook_open', '1H_Wand'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], '#6f88e8'),
-  rook: hero('Knight', ['1H_Sword', 'Round_Shield'], '1H_Melee_Attack_Chop', ['Throw', 'Cheer', 'Dodge_Forward', '2H_Melee_Attack_Chop'], '#8a6a4a'),
-  aurin: { file: 'Mage', hide: ['Spellbook', 'Spellbook_open', '1H_Wand'], attack: 'Spellcast_Shoot', abilities: ['Spellcast_Shoot', 'Spellcast_Raise', 'Dodge_Forward', 'Spellcast_Long'] },
-  brakk: { file: 'Barbarian', hide: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', 'Mug'], attack: '2H_Melee_Attack_Chop', abilities: ['Cheer', '2H_Melee_Attack_Spin', 'Dodge_Forward', '2H_Melee_Attack_Chop'] },
-  sylla: { file: 'Rogue', hide: ['Knife_Offhand', '1H_Crossbow', 'Knife', 'Throwable'], attack: '2H_Ranged_Shoot', abilities: ['Spellcast_Raise', '2H_Ranged_Shoot', 'Dodge_Forward', '2H_Ranged_Shoot'] },
+  masteryi: hero('Rogue', ['Knife', 'Knife_Offhand'], MELEE[0], ['Dodge_Forward', 'Cheer', 'Spellcast_Raise', '2H_Melee_Attack_Spin'], '#e8c24a'),
+  twitch: hero('Rogue_Hooded', ['1H_Crossbow', 'Knife_Offhand'], '1H_Ranged_Shoot', ['Spellcast_Raise', 'Throw', '1H_Ranged_Shoot', '1H_Ranged_Shoot'], '#8fbf3a'),
+  monkeyking: hero('Barbarian', ['2H_Axe'], '2H_Melee_Attack_Chop', ['2H_Melee_Attack_Chop', 'Dodge_Forward', 'Dodge_Forward', '2H_Melee_Attack_Spin'], '#e0a030'),
+  yuumi: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Dodge_Forward', 'Spellcast_Raise', 'Spellcast_Long'], '#b78cff'),
+  naafiri: hero('Rogue', ['Knife', 'Knife_Offhand'], MELEE[0], ['Spellcast_Raise', 'Cheer', 'Dodge_Forward', 'Dodge_Forward'], '#c8453b'),
+  irelia: hero('Knight', ['1H_Sword'], MELEE[0], ['Dodge_Forward', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], '#4fb8e8'),
+  lux: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Spellcast_Long'], '#ffe6a8'),
+  rengar: hero('Rogue_Hooded', ['Knife', 'Knife_Offhand'], MELEE[0], ['Cheer', '2H_Melee_Attack_Spin', 'Throw', 'Spellcast_Raise'], '#c8884a'),
+  garen: hero('Knight', ['2H_Sword'], '2H_Melee_Attack_Chop', ['Cheer', 'Cheer', '2H_Melee_Attack_Spin', '2H_Melee_Attack_Chop'], '#6fa8ff'),
+  ashe: hero('Rogue_Hooded', ['2H_Crossbow'], '2H_Ranged_Shoot', ['Spellcast_Raise', '2H_Ranged_Shoot', 'Spellcast_Raise', '2H_Ranged_Shoot'], '#9fe0ff'),
+  annie: hero('Mage', ['Spellbook_open', '1H_Wand'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Raise', 'Spellcast_Long'], '#ff5a5a'),
+  malphite: hero('Knight', ['1H_Sword', 'Spike_Shield'], MELEE[0], ['Throw', 'Cheer', '2H_Melee_Attack_Spin', 'Dodge_Forward'], '#9a8f80'),
+  ezreal: hero('Rogue_Hooded', ['1H_Crossbow', 'Knife_Offhand'], '1H_Ranged_Shoot', ['1H_Ranged_Shoot', '1H_Ranged_Shoot', 'Dodge_Forward', 'Spellcast_Long'], '#ffd24a'),
+  jinx: hero('Rogue', ['2H_Crossbow'], '2H_Ranged_Shoot', ['Cheer', '2H_Ranged_Shoot', 'Throw', '2H_Ranged_Shoot'], '#4fb8ff'),
+  leona: hero('Knight', ['1H_Sword', 'Round_Shield'], MELEE[0], ['Cheer', 'Cheer', 'Dodge_Forward', 'Spellcast_Long'], '#ffc94a'),
+  blitzcrank: hero('Barbarian', ['1H_Axe', 'Barbarian_Round_Shield'], MELEE[0], ['Throw', 'Cheer', '2H_Melee_Attack_Chop', 'Spellcast_Long'], '#c8a46a'),
+  morgana: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Raise', 'Spellcast_Long'], '#a86bff'),
+  zed: hero('Rogue_Hooded', ['Knife', 'Knife_Offhand'], MELEE[0], ['Throw', 'Dodge_Forward', '2H_Melee_Attack_Spin', 'Dodge_Forward'], '#d83a3a'),
+  darius: hero('Barbarian', ['2H_Axe'], '2H_Melee_Attack_Chop', ['2H_Melee_Attack_Spin', 'Cheer', '2H_Melee_Attack_Chop', 'Dodge_Forward'], '#b8442a'),
+  ahri: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Dodge_Forward'], '#ff8ac8'),
 };
 const MINIONS = {
   melee: { file: 'Skeleton_Minion', weapon: 'Skeleton_Blade', offhand: 'Skeleton_Shield_Small_A', attack: '1H_Melee_Attack_Chop', tint: /Cloak/ },
@@ -583,7 +591,7 @@ function makeAvatar(u: WUnit): Avatar | null {
   let offhand = '';
   let hue: THREE.Color | null = null;
   if (u.kind === 'champ') {
-    const h = HEROES[u.champ!.def.id] ?? HEROES.aurin;
+    const h = HEROES[u.champ!.def.id] ?? HEROES.lux;
     file = h.file;
     attack = h.attack;
     abilities = h.abilities;

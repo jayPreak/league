@@ -1,0 +1,769 @@
+{
+ "id": "Darius",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Darius",
+ "title": "the Hand of Noxus",
+ "tags": [
+  "Fighter",
+  "Tank"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 652,
+  "hpperlevel": 114,
+  "mp": 263,
+  "mpperlevel": 58,
+  "movespeed": 340,
+  "armor": 37,
+  "armorperlevel": 5.2,
+  "spellblock": 32,
+  "spellblockperlevel": 2.05,
+  "attackrange": 175,
+  "hpregen": 10,
+  "hpregenperlevel": 0.95,
+  "mpregen": 6.6,
+  "mpregenperlevel": 0.35,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 64,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 1,
+  "attackspeed": 0.625
+ },
+ "basicAttack": {
+  "range": 175,
+  "attackSpeed": 0.625,
+  "asRatio": {
+   "baseValue": 0.625,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.10000000149011612
+ },
+ "passive": {
+  "name": "Hemorrhage",
+  "description": "Darius' attacks and damaging abilities cause enemies to bleed for physical damage over 5 seconds, stacking up to 5 times. Darius enrages and gains massive Attack Damage when his target reaches max stacks.",
+  "values": {
+   "DariusHemoMarker": {
+    "DataValues": {
+     "MonsterMod": [
+      2.5,
+      2.5,
+      2.5,
+      2.5,
+      2.5,
+      2.5,
+      2.5
+     ],
+     "SecondsPerTick": [
+      1.2599999904632568,
+      1.2599999904632568,
+      1.2599999904632568,
+      1.2599999904632568,
+      1.2599999904632568,
+      1.2599999904632568,
+      1.2599999904632568
+     ],
+     "BleedDuration": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "MaxStacks": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ]
+    },
+    "calcs": {
+     "BleedDamagePerStack": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 13,
+        "mEndValue": 30,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       },
+       {
+        "mStat": 2,
+        "mStatFormula": 2,
+        "mCoefficient": 0.30000001192092896,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "NoxianMightBonusAD": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 30,
+        "mInitialBonusPerLevel": 5,
+        "mBreakpoints": [
+         {
+          "mLevel": 11,
+          "mBonusPerLevelAtAndAfter": 10,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 14,
+          "mBonusPerLevelAtAndAfter": 25,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     }
+    },
+    "missileSpeed": 1200
+   },
+   "DariusExecute": {
+    "DataValues": {
+     "RBaseDamage": [
+      0,
+      125,
+      250,
+      375,
+      500,
+      625,
+      750
+     ],
+     "RDamagePercentPerHemoStack": [
+      0.20000000298023224,
+      0.20000000298023224,
+      0.20000000298023224,
+      0.20000000298023224,
+      0.20000000298023224,
+      0.20000000298023224,
+      0.20000000298023224
+     ],
+     "RRecastDuration": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ]
+    },
+    "calcs": {
+     "Damage": {
+      "mFormulaParts": [
+       {
+        "mDataValue": "RBaseDamage",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       {
+        "mStat": 2,
+        "mStatFormula": 2,
+        "mCoefficient": 0.75,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "MaximumDamage": {
+      "mMultiplier": {
+       "mNumber": 2,
+       "__type": "NumberCalculationPart"
+      },
+      "tooltipOnly": true,
+      "mModifiedGameCalculation": "Damage",
+      "__type": "GameCalculationModified"
+     }
+    },
+    "cooldown": [
+     120,
+     120,
+     100,
+     80,
+     6,
+     6,
+     6
+    ],
+    "castRange": [
+     475,
+     475,
+     475,
+     475,
+     475,
+     475,
+     375
+    ],
+    "castRadius": [
+     475,
+     475,
+     475,
+     475,
+     475,
+     475,
+     475
+    ],
+    "mana": [
+     100,
+     100,
+     0,
+     0,
+     0,
+     0
+    ],
+    "missileSpeed": 20,
+    "castTime": 0.3666999936103821,
+    "tags": [
+     "Trait_Ultimate",
+     "PositiveEffect_MoveBlock",
+     "Trait_DamageAbility"
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Decimate",
+   "description": "Darius winds up and swings his axe in a wide circle. Enemies struck by the blade take more damage than those struck by the handle. Darius heals based on enemy champions and large monsters hit by the blade.",
+   "tooltip": "Darius hefts his axe then swings it around, dealing <physicalDamage>{{ bladedamage }} physical damage</physicalDamage> with the edge and <physicalDamage>{{ handledamage }} damage</physicalDamage> with the handle. Enemies hit with the handle do not take a <keywordMajor>Hemorrhage</keywordMajor> stack.<br /><br />Darius restores <healing>{{ missinghealthheal }}% missing Health</healing> per enemy champion and large jungle monster hit with the edge, up to a max of <healing>{{ missinghealpercent }}%</healing>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    9,
+    7.75,
+    6.5,
+    5.25,
+    4
+   ],
+   "ddCost": [
+    25,
+    30,
+    35,
+    40,
+    45
+   ],
+   "ddRange": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Total AD Ratio",
+     "Cooldown",
+     "@AbilityResourceName@ Cost"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ totaladratio }}% -> {{ totaladratioNL }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "DariusCleave": {
+     "DataValues": {
+      "MissingHealthHeal": [
+       17,
+       17,
+       17,
+       17,
+       17,
+       17,
+       17
+      ],
+      "TotalADRatio": [
+       90,
+       100,
+       110,
+       120,
+       130,
+       140,
+       150
+      ],
+      "BaseDamage": [
+       10,
+       50,
+       80,
+       110,
+       140,
+       170,
+       200
+      ],
+      "InnerCircleDamagePercent": [
+       35,
+       35,
+       35,
+       35,
+       35,
+       35,
+       35
+      ],
+      "MissingHealPercent": [
+       51,
+       51,
+       51,
+       51,
+       51,
+       51,
+       51
+      ]
+     },
+     "calcs": {
+      "BladeDamage": {
+       "tooltipOnly": true,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mSubpart": {
+          "mPart1": {
+           "mDataValue": "TotalADRatio",
+           "__type": "NamedDataValueCalculationPart"
+          },
+          "mPart2": {
+           "mNumber": 0.009999999776482582,
+           "__type": "NumberCalculationPart"
+          },
+          "__type": "ProductOfSubPartsCalculationPart"
+         },
+         "__type": "StatBySubPartCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "HandleDamage": {
+       "mMultiplier": {
+        "mNumber": 0.3499999940395355,
+        "__type": "NumberCalculationPart"
+       },
+       "tooltipOnly": true,
+       "mModifiedGameCalculation": "BladeDamage",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      10,
+      9,
+      8,
+      7,
+      6,
+      5,
+      5
+     ],
+     "castRange": [
+      270,
+      270,
+      270,
+      270,
+      270,
+      270,
+      270
+     ],
+     "mana": [
+      25,
+      30,
+      35,
+      40,
+      45,
+      50
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.23440000414848328,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_ActiveHeal",
+      "SpecialCase_DelayedCooldown",
+      "Trait_SignatureSpell",
+      "Trait_Melee_BigWindup",
+      "Trait_AoE"
+     ]
+    },
+    "DariusCleaveCloseTarget": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Crippling Strike",
+   "description": "Darius's next attack strikes an enemy's crucial artery. As they bleed out, their Move Speed is slowed.",
+   "tooltip": "Darius' next Attack deals <physicalDamage>{{ empoweredattackdamage }} physical damage</physicalDamage> and <status>Slows</status> by {{ slowpercent }}% for {{ slowduration }} second.<br /><br />This Ability refunds its Mana cost and reduces its Cooldown by {{ percentcdrefund }}% if it kills the target.<br /><br /><rules>This Ability triggers spell effects upon dealing damage.</rules>{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    5,
+    5,
+    5,
+    5,
+    5
+   ],
+   "ddCost": [
+    40,
+    40,
+    40,
+    40,
+    40
+   ],
+   "ddRange": [
+    300,
+    300,
+    300,
+    300,
+    300
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Total AD Ratio"
+    ],
+    "effect": [
+     "{{ adratio*100.000000 }} -> {{ adrationl*100.000000 }}"
+    ]
+   },
+   "game": {
+    "DariusNoxianTacticsONH": {
+     "DataValues": {
+      "SlowPercent": [
+       90,
+       90,
+       90,
+       90,
+       90,
+       90,
+       90
+      ],
+      "PercentCDRefund": [
+       50,
+       50,
+       50,
+       50,
+       50,
+       50,
+       50
+      ],
+      "ADRatio": [
+       1.5,
+       1.399999976158142,
+       1.4500000476837158,
+       1.5,
+       1.5499999523162842,
+       1.600000023841858,
+       1.649999976158142
+      ],
+      "SlowDuration": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "EmpoweredAttackDamage": {
+       "tooltipOnly": true,
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mSubpart": {
+          "mDataValue": "ADRatio",
+          "__type": "NamedDataValueCalculationPart"
+         },
+         "__type": "StatBySubPartCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "castRange": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.3666999936103821,
+     "tags": [
+      "PositiveEffect_EmpowerAttack",
+      "Trait_AttackReset",
+      "Trait_DamageAbility",
+      "Trait_Strike"
+     ]
+    },
+    "DariusNoxianTacticsActive": {
+     "buff": true
+    },
+    "DariusNoxianTacticsONHAttack": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRadius": [
+      175,
+      175,
+      175,
+      175,
+      175,
+      175,
+      175
+     ],
+     "missileSpeed": 20
+    },
+    "DariusNoxianTacticsSlow": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      16,
+      15,
+      14,
+      13,
+      12,
+      11,
+      11
+     ],
+     "castRange": [
+      700,
+      700,
+      700,
+      700,
+      700,
+      700,
+      700
+     ],
+     "castRadius": [
+      210,
+      210,
+      210,
+      210,
+      210,
+      210,
+      210
+     ],
+     "mana": [
+      80,
+      80,
+      80,
+      80,
+      80,
+      80
+     ],
+     "missileSpeed": 0
+    },
+    "DariusSlow": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Apprehend",
+   "description": "Darius hones his axe, passively causing his physical damage to ignore a percentage of his target's Armor. When activated, Darius sweeps up his enemies with his axe's hook and pulls them to him.",
+   "tooltip": "<spellPassive>Passive:</spellPassive> Darius gains {{ passivepercentarmorpen }}% Armor Penetration.<br /><br /><spellActive>Active:</spellActive> Darius hooks with his axe, <status>Pulling</status>, and <status>Knocking Up</status> and <status>Slowing</status> by {{ slowpercent }}% for {{ slowduration }} second.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    26,
+    23.5,
+    21,
+    18.5,
+    16
+   ],
+   "ddCost": [
+    70,
+    60,
+    50,
+    40,
+    30
+   ],
+   "ddRange": [
+    535,
+    535,
+    535,
+    535,
+    535
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Percent Armor Penetration",
+     "@AbilityResourceName@ Cost",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ passivepercentarmorpen }} -> {{ passivepercentarmorpenNL }}",
+     "{{ cost }} -> {{ costNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "DariusAxeGrabCone": {
+     "DataValues": {
+      "PassivePercentArmorPen": [
+       20,
+       20,
+       25,
+       30,
+       35,
+       40,
+       45
+      ],
+      "SlowPercent": [
+       40,
+       40,
+       40,
+       40,
+       40,
+       40,
+       40
+      ],
+      "SlowDuration": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      26,
+      26,
+      23.5,
+      21,
+      18.5,
+      16,
+      16
+     ],
+     "castRange": [
+      550,
+      550,
+      550,
+      550,
+      550,
+      550,
+      550
+     ],
+     "castRadius": [
+      225,
+      225,
+      225,
+      225,
+      225,
+      225,
+      225
+     ],
+     "mana": [
+      70,
+      60,
+      50,
+      40,
+      30,
+      20
+     ],
+     "missileSpeed": 1500,
+     "castTime": 0.25,
+     "tags": [
+      "Trait_ImmobilizingCCSpell",
+      "Trait_DamageAbility",
+      "Trait_Target_Directional",
+      "Trait_Low_Damage",
+      "Trait_AoE"
+     ]
+    },
+    "DariusESlow": {
+     "buff": true
+    },
+    "DariusAxeGrabArmorPen": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Noxian Guillotine",
+   "description": "Darius leaps to an enemy champion and strikes a lethal blow, dealing true damage. This damage is increased for each stack of Hemorrhage on the target. If Noxian Guillotine is a killing blow, its cooldown is refreshed for a brief duration.",
+   "tooltip": "Darius leaps to an enemy and strikes a lethal blow, dealing <trueDamage>{{ damage }} true damage</trueDamage>. For each <keywordMajor>Hemorrhage</keywordMajor> on the target, this Ability deals an additional {{ rdamagepercentperhemostack*100 }}% damage, up to a max of <trueDamage>{{ maximumdamage }} damage</trueDamage>.<br /><br />If this kills the target, Darius may <recast>Recast</recast> this Ability once within {{ rrecastduration }} seconds. At rank 3, this Ability has no Mana cost and kills refresh the Cooldown completely.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    120,
+    100,
+    80
+   ],
+   "ddCost": [
+    100,
+    100,
+    0
+   ],
+   "ddRange": [
+    460,
+    460,
+    460
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ rbasedamage }} -> {{ rbasedamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {}
+  }
+ ]
+}

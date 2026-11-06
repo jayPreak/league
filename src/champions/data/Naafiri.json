@@ -1,0 +1,1362 @@
+{
+ "id": "Naafiri",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Naafiri",
+ "title": "the Hound of a Hundred Bites",
+ "tags": [
+  "Assassin",
+  "Fighter"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 610,
+  "hpperlevel": 105,
+  "mp": 400,
+  "mpperlevel": 55,
+  "movespeed": 340,
+  "armor": 28,
+  "armorperlevel": 4.2,
+  "spellblock": 32,
+  "spellblockperlevel": 2.05,
+  "attackrange": 125,
+  "hpregen": 6.25,
+  "hpregenperlevel": 0.6,
+  "mpregen": 7.5,
+  "mpregenperlevel": 1,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 55,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 2.1,
+  "attackspeed": 0.663
+ },
+ "basicAttack": {
+  "range": 125,
+  "attackSpeed": 0.663,
+  "asRatio": {
+   "baseValue": 0.625,
+   "__type": "ModifiableFloat"
+  }
+ },
+ "passive": {
+  "name": "We Are More",
+  "description": "Naafiri spawns packmates that attack the targets of her attacks and abilities.",
+  "values": {
+   "NaafiriP": {
+    "DataValues": {
+     "CooldownReduceOnKill": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "CooldownReduceOnAbilityHit": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "PackmateBaseAS": [
+      0.6880000233650208,
+      0.6880000233650208,
+      0.6880000233650208,
+      0.6880000233650208,
+      0.6880000233650208,
+      0.6880000233650208,
+      0.6880000233650208
+     ],
+     "PackmateBaseMS": [
+      340,
+      340,
+      340,
+      340,
+      340,
+      340,
+      340
+     ],
+     "PackmateModifierTooltipOnly": [
+      0.07999999821186066,
+      0.07999999821186066,
+      0.07999999821186066,
+      0.07999999821186066,
+      0.07999999821186066,
+      0.07999999821186066,
+      0.07999999821186066
+     ],
+     "LeapSpeed": [
+      1250,
+      1250,
+      1250,
+      1250,
+      1250,
+      1250,
+      1250
+     ],
+     "LeapMin": [
+      75,
+      75,
+      75,
+      75,
+      75,
+      75,
+      75
+     ],
+     "LeapMax": [
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+     ],
+     "PackmateTowerModifier": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "PackmateMonsterMod": [
+      1.5499999523162842,
+      1.5499999523162842,
+      1.5499999523162842,
+      1.5499999523162842,
+      1.5499999523162842,
+      1.5499999523162842,
+      1.5499999523162842
+     ],
+     "PackmateTauntDuration": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+     ],
+     "PackmateLastHitHelpCD": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+     ],
+     "PackmateCSHelpRadiusMax": [
+      800,
+      800,
+      800,
+      800,
+      800,
+      800,
+      800
+     ],
+     "PackmateCSHelpRadiusMin": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+     ],
+     "PackmateFrenzyDuration": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "PackmateFrenzyMaxCounters": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "PackmateFrenzyDamageMult": [
+      1.2999999523162842,
+      1.2999999523162842,
+      1.2999999523162842,
+      1.2999999523162842,
+      1.2999999523162842,
+      1.2999999523162842,
+      1.2999999523162842
+     ],
+     "ProcDamageModifier": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "HealthRegenDelay": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "HealthRegenPercent": [
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25,
+      0.25
+     ],
+     "NonChampDamageModifier": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+     ],
+     "MeleeAttackDamageModifier": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+     ],
+     "PackmateBonusADRatio": [
+      0.03999999910593033,
+      0.03999999910593033,
+      0.03999999910593033,
+      0.03999999910593033,
+      0.03999999910593033,
+      0.03999999910593033,
+      0.03999999910593033
+     ]
+    },
+    "calcs": {
+     "PackmateSpawnCooldown": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 30,
+        "mBreakpoints": [
+         {
+          "mLevel": 6,
+          "mAdditionalBonusAtThisLevel": -5,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 9,
+          "mAdditionalBonusAtThisLevel": -5,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 12,
+          "mAdditionalBonusAtThisLevel": -5,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 15,
+          "mAdditionalBonusAtThisLevel": -5,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "PackmateCap": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 2,
+        "mBreakpoints": [
+         {
+          "mLevel": 9,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 12,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 15,
+          "mAdditionalBonusAtThisLevel": 1,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "PackmateTotalDamage": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 10,
+        "mEndValue": 20,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       },
+       {
+        "mStat": 2,
+        "mStatFormula": 2,
+        "mDataValue": "PackmateBonusADRatio",
+        "__type": "StatByNamedDataValueCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "MinionExecuteThreshold": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 25,
+        "mInitialBonusPerLevel": 3,
+        "mBreakpoints": [
+         {
+          "mLevel": 12,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "FrenzyDamageTooltipOnly": {
+      "mMultiplier": {
+       "mDataValue": "PackmateFrenzyDamageMult",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "mModifiedGameCalculation": "PackmateTotalDamage",
+      "__type": "GameCalculationModified"
+     },
+     "AOEDamageModifier": {
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 0.7599999904632568,
+        "mInitialBonusPerLevel": -0.014999999664723873,
+        "mBreakpoints": [
+         {
+          "mLevel": 16,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "mDisplayAsPercent": true,
+      "__type": "GameCalculation"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Darkin Daggers",
+   "description": "Naafiri hurls up to two daggers, each inflicting bleed, or each inflicting bonus damage if the target is already bleeding.<br><br>Packmates leap to attack the first champion or monster hit by this skill.<br>",
+   "tooltip": "Naafiri hurls Darkin-tainted blades, dealing <physicalDamage>{{ spell.naafiriq:totaldamagefirstcast }} physical damage</physicalDamage> and inflicting a bleed, dealing <physicalDamage>{{ spell.naafiriq:totalbleeddamage }} physical damage</physicalDamage> over {{ spell.naafiriq:bleedduration }} seconds.<br /><br />Naafiri can <recast>Recast</recast> this Ability. If enemies hit are already bleeding from this Ability, it instead deals the remaining bleed damage plus between <physicalDamage>{{ spell.naafiriq:totalmindamagesecondcast }}</physicalDamage> and <physicalDamage>{{ spell.naafiriq:totalmaxdamagesecondcast }} physical damage</physicalDamage>, based on their missing Health. If that target was a champion or large monster, Naafiri restores <healing>{{ spell.naafiriq:totalhealsecondcast }} Health</healing>.<br /><br /><keywordMajor>Packmates</keywordMajor> will leap at the first champion or monster hit and attack them for {{ spell.naafirip:packmatetauntduration }} seconds. <br /><br />{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    9,
+    8.5,
+    8,
+    7.5,
+    7
+   ],
+   "ddCost": [
+    50,
+    60,
+    70,
+    80,
+    90
+   ],
+   "ddRange": [
+    900,
+    900,
+    900,
+    900,
+    900
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Initial Damage",
+     "Second Cast Damage",
+     "Bleed Damage",
+     "Healing",
+     "@AbilityResourceName@ Cost",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamagefirstcast }} -> {{ basedamagefirstcastNL }}",
+     "{{ basedamagesecondcast }} -> {{ basedamagesecondcastNL }}",
+     "{{ bleedbasedamage }} -> {{ bleedbasedamageNL }}",
+     "{{ basehealsecondcast }} -> {{ basehealsecondcastNL }}",
+     "{{ cost }} -> {{ costNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "NaafiriQ": {
+     "DataValues": {
+      "BaseDamageFirstCast": [
+       30,
+       35,
+       40,
+       45,
+       50,
+       55,
+       60
+      ],
+      "BaseDamageSecondCast": [
+       17.5,
+       30,
+       42.5,
+       55,
+       67.5,
+       80,
+       92.5
+      ],
+      "BleedBaseDamage": [
+       10,
+       35,
+       60,
+       85,
+       110,
+       135,
+       160
+      ],
+      "BleedInterval": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ],
+      "RecastWindow": [
+       4,
+       4,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "RecastLockout": [
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75,
+       0.75
+      ],
+      "BaseHealSecondCast": [
+       40,
+       55,
+       70,
+       85,
+       100,
+       115,
+       130
+      ],
+      "BleedDuration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "ExecuteMultiplier": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "MinionMod": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "FirstCastBonusADRatio": [
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224
+      ],
+      "SecondCastBonusADRatio": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ],
+      "BleedBonusADRatio": [
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929
+      ],
+      "HealBonusADRatio": [
+       0.44999998807907104,
+       0.44999998807907104,
+       0.44999998807907104,
+       0.44999998807907104,
+       0.44999998807907104,
+       0.44999998807907104,
+       0.44999998807907104
+      ],
+      "SecondCastMaxADRatio": [
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071,
+       0.699999988079071
+      ]
+     },
+     "calcs": {
+      "TotalDamageFirstCast": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamageFirstCast",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "FirstCastBonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalMinDamageSecondCast": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamageSecondCast",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "SecondCastBonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalHealSecondCast": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseHealSecondCast",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "HealBonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalBleedDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BleedBaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "BleedBonusADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "MinionExecuteThreshold": {
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 30,
+         "mInitialBonusPerLevel": 4,
+         "mBreakpoints": [
+          {
+           "mLevel": 12,
+           "__type": "Breakpoint"
+          }
+         ],
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalMaxDamageSecondCast": {
+       "mMultiplier": {
+        "mDataValue": "ExecuteMultiplier",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamageSecondCast",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "SecondCastMaxADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      9,
+      9,
+      8.5,
+      8,
+      7.5,
+      7,
+      7
+     ],
+     "castRange": [
+      900,
+      900,
+      900,
+      900,
+      900,
+      900,
+      900
+     ],
+     "mana": [
+      50,
+      60,
+      70,
+      80,
+      90,
+      90
+     ],
+     "castTime": 0.25,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_DoT",
+      "Trait_SignatureSpell",
+      "Trait_Ranged_Piercing",
+      "Trait_AoE"
+     ]
+    },
+    "NaafiriQRecast": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      11,
+      11,
+      10,
+      9,
+      8,
+      7,
+      7
+     ],
+     "castRange": [
+      900,
+      900,
+      900,
+      900,
+      900,
+      900,
+      900
+     ],
+     "castTime": 0.25,
+     "tags": [
+      "Trait_FreeRecast"
+     ]
+    },
+    "NaafiriQBleed": {
+     "DataValues": {},
+     "calcs": {}
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "The Call of the Pack",
+   "description": "Naafiri becomes Untargetable and empowers her pack, spawning additional packmates and gaining increased Move Speed and Attack Damage.<br>",
+   "tooltip": "Naafiri becomes Untargetable for {{ untargetableduration }} second and prepares to hunt, spawning <keywordMajor>{{ packmatestoadd }} additional Packmates</keywordMajor> and gaining <physicalDamage>{{ bonusad }} Attack Damage</physicalDamage> and <speed>{{ movespeedamount*100 }}% Move Speed</speed> for {{ duration }} seconds.<br /><br /><keywordMajor>Packmates</keywordMajor> become Untargetable and are recalled to Naafiri.<br /><br />{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    26,
+    24,
+    22,
+    20,
+    18
+   ],
+   "ddCost": [
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "ddRange": [
+    400,
+    400,
+    400,
+    400,
+    400
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Move Speed",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ movespeedamount*100.000000 }}% -> {{ movespeedamountnl*100.000000 }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "NaafiriR": {
+     "DataValues": {
+      "PackmatesToAdd": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "Duration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "MoveSpeedAmount": [
+       0.17499999701976776,
+       0.20000000298023224,
+       0.22499999403953552,
+       0.25,
+       0.2750000059604645,
+       0.30000001192092896,
+       0.32499998807907104
+      ],
+      "MoveSpeedDuration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "PackmateSpawnRateIncrease": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ],
+      "NaafiriADPercentBoost": [
+       0.2199999988079071,
+       0.2199999988079071,
+       0.2199999988079071,
+       0.2199999988079071,
+       0.2199999988079071,
+       0.2199999988079071,
+       0.2199999988079071
+      ],
+      "UntargetableDuration": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "BonusAD": {
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mDataValue": "NaafiriADPercentBoost",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      26,
+      26,
+      24,
+      22,
+      20,
+      18,
+      18
+     ],
+     "mana": [
+      60,
+      60,
+      60,
+      60,
+      60,
+      60
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.75,
+     "tags": [
+      "Trait_Untargetable"
+     ]
+    },
+    "NaafiriRPassive": {
+     "DataValues": {},
+     "calcs": {}
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Eviscerate",
+   "description": "Naafiri dashes and damages enemies in an area around her, recalling her packmates and fully healing them.",
+   "tooltip": "Naafiri surges forward, dealing <physicalDamage>{{ totaldamagefirstslash }} physical damage</physicalDamage>, then explodes in a flurry of blades, dealing <physicalDamage>{{ totaldamagesecondslash }} physical damage.</physicalDamage><br /><br /><keywordMajor>Packmates</keywordMajor> become Untargetable and are recalled to Naafiri <healing>restoring 100% Health</healing>. <br />{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    11,
+    10,
+    9,
+    8,
+    7
+   ],
+   "ddCost": [
+    40,
+    40,
+    40,
+    40,
+    40
+   ],
+   "ddRange": [
+    450,
+    450,
+    450,
+    450,
+    450
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage (First Slash)",
+     "Damage (Second Slash)",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamagefirstslash }} -> {{ basedamagefirstslashNL }}",
+     "{{ basedamagesecondhit }} -> {{ basedamagesecondhitNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "NaafiriE": {
+     "DataValues": {
+      "BaseDamageFirstSlash": [
+       5,
+       15,
+       25,
+       35,
+       45,
+       55,
+       65
+      ],
+      "ADRatioFirstSlash": [
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645,
+       0.4000000059604645
+      ],
+      "BaseDamageSecondHit": [
+       35,
+       60,
+       85,
+       110,
+       135,
+       160,
+       185
+      ],
+      "ADRatioSecondHit": [
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929,
+       0.800000011920929
+      ],
+      "RadiusSecondSlash": [
+       230,
+       230,
+       230,
+       230,
+       230,
+       230,
+       230
+      ],
+      "DashDistance": [
+       450,
+       450,
+       450,
+       450,
+       450,
+       450,
+       450
+      ],
+      "DashSpeed": [
+       900,
+       900,
+       900,
+       900,
+       900,
+       900,
+       900
+      ],
+      "MaxDashCheatDistance": [
+       650,
+       650,
+       650,
+       650,
+       650,
+       650,
+       650
+      ],
+      "MinDashDistance": [
+       250,
+       250,
+       250,
+       250,
+       250,
+       250,
+       250
+      ]
+     },
+     "calcs": {
+      "TotalDamageFirstSlash": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamageFirstSlash",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "ADRatioFirstSlash",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalDamageSecondSlash": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamageSecondHit",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "ADRatioSecondHit",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      11,
+      11,
+      10,
+      9,
+      8,
+      7,
+      7
+     ],
+     "castRange": [
+      450,
+      450,
+      450,
+      450,
+      450,
+      450,
+      450
+     ],
+     "castRadius": [
+      230,
+      230,
+      230,
+      230,
+      230,
+      230,
+      230
+     ],
+     "mana": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+     ],
+     "tags": [
+      "PositiveEffect_MoveBlock",
+      "Trait_PlayerSelectedDashDirection",
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Hounds' Pursuit",
+   "description": "Naafiri and her packmates dash at a champion, dealing damage. Naafiri reveals nearby enemies if she scores a takedown and can recast this Ability once. The second cast grants a shield.",
+   "tooltip": "Naafiri dashes at an enemy champion, dealing <physicalDamage>{{ totaldamage }} physical damage</physicalDamage> and briefly <status>Slowing</status> them. <keywordMajor>Packmates</keywordMajor> become Untargetable and dash alongside Naafiri, dealing <physicalDamage>{{ packmatedamage }} physical damage</physicalDamage> per <keywordMajor>Packmate</keywordMajor>.<br /><br />If Naafiri scores a Takedown within {{ takedownwindow }} seconds she reveals nearby enemies and can recast this Ability once. The second cast grants <shield>{{ shieldtotal }} Shield</shield> for {{ shieldduration }} seconds.<br /><br /><br />{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    110,
+    95,
+    80
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    900,
+    900,
+    900
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Shield Amount",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ shieldsize }} -> {{ shieldsizeNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "NaafiriW": {
+     "DataValues": {
+      "BaseDamage": [
+       50,
+       125,
+       200,
+       275,
+       350,
+       425,
+       500
+      ],
+      "DashSpeed": [
+       1800,
+       1800,
+       1800,
+       1800,
+       1800,
+       1800,
+       1800
+      ],
+      "SlowDuration": [
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25
+      ],
+      "SlowPercent": [
+       -0.9900000095367432,
+       -0.9900000095367432,
+       -0.9900000095367432,
+       -0.9900000095367432,
+       -0.9900000095367432,
+       -0.9900000095367432,
+       -0.9900000095367432
+      ],
+      "PackmateModifier": [
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612,
+       0.10000000149011612
+      ],
+      "FailCastCDRefund": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ],
+      "ShredDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "TakedownWindow": [
+       7,
+       7,
+       7,
+       7,
+       7,
+       7,
+       7
+      ],
+      "RecastWindow": [
+       12,
+       12,
+       12,
+       12,
+       12,
+       12,
+       12
+      ],
+      "ShieldDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "ShieldSize": [
+       50,
+       100,
+       150,
+       200,
+       250,
+       300,
+       350
+      ],
+      "VisionDuration": [
+       4,
+       4,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "VisionPulseDuration": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "VisionRadius": [
+       2100,
+       2100,
+       2100,
+       2100,
+       2100,
+       2100,
+       2100
+      ],
+      "WRefreshOnCast": [
+       1.75,
+       1.75,
+       1.75,
+       1.75,
+       1.75,
+       1.75,
+       1.75
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mCoefficient": 1,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "PackmateDamage": {
+       "mMultiplier": {
+        "mDataValue": "PackmateModifier",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mModifiedGameCalculation": "TotalDamage",
+       "__type": "GameCalculationModified"
+      },
+      "ArmorShred": {
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 6,
+         "mInitialBonusPerLevel": 2,
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "ShieldTotal": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "ShieldSize",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mCoefficient": 1.5,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      110,
+      110,
+      95,
+      80,
+      80,
+      80,
+      80
+     ],
+     "castRange": [
+      900,
+      900,
+      900,
+      900,
+      900,
+      900,
+      900
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "channelDuration": [
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75,
+      0.75
+     ],
+     "tags": [
+      "PositiveEffect_MoveBlock",
+      "Trait_Ultimate",
+      "Trait_DamageAbility",
+      "Trait_AttackBuff_Duration",
+      "Trait_Shield"
+     ]
+    }
+   }
+  }
+ ]
+}

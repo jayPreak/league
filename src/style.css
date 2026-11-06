@@ -1953,3 +1953,9 @@ body.touch #mp input {
   color: #fff3d6;
   background: rgba(200, 170, 110, 0.16);
 }
+
+#cdetail .stats {
+  font-size: 11px;
+  opacity: 0.7;
+  margin: 2px 0 6px;
+}

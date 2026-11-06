@@ -1,0 +1,946 @@
+{
+ "id": "MonkeyKing",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Wukong",
+ "title": "the Monkey King",
+ "tags": [
+  "Fighter",
+  "Tank"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 610,
+  "hpperlevel": 99,
+  "mp": 330,
+  "mpperlevel": 65,
+  "movespeed": 340,
+  "armor": 31,
+  "armorperlevel": 4.7,
+  "spellblock": 28,
+  "spellblockperlevel": 2.05,
+  "attackrange": 175,
+  "hpregen": 5.5,
+  "hpregenperlevel": 0.65,
+  "mpregen": 8,
+  "mpregenperlevel": 0.8,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 66,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 3,
+  "attackspeed": 0.69
+ },
+ "basicAttack": {
+  "range": 175,
+  "attackSpeed": 0.69,
+  "asRatio": {
+   "baseValue": 0.6579999923706055,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.09166666865348816
+ },
+ "passive": {
+  "name": "Stone Skin",
+  "description": "Wukong gains stacking armor and max health regeneration while fighting champions and monsters.",
+  "values": {
+   "MonkeyKingPassive": {
+    "DataValues": {
+     "CombatDuration": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+     ],
+     "StackDuration": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "MaxStacks": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+     ],
+     "StackMultiplier": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "HealthPercentPer5": [
+      0.0035000001080334187,
+      0.0035000001080334187,
+      0.0035000001080334187,
+      0.0035000001080334187,
+      0.0035000001080334187,
+      0.0035000001080334187,
+      0.0035000001080334187
+     ],
+     "TooltipMult": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+     ],
+     "TooltipMaxHealthPercentPer5": [
+      2.0999999046325684,
+      2.0999999046325684,
+      2.0999999046325684,
+      2.0999999046325684,
+      2.0999999046325684,
+      2.0999999046325684,
+      2.0999999046325684
+     ],
+     "FallOffRate": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "calcs": {
+     "BonusArmor": {
+      "mFormulaParts": [
+       {
+        "mStartValue": 4.5,
+        "mEndValue": 10,
+        "__type": "ByCharLevelInterpolationCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "TooltipMaxArmor": {
+      "mMultiplier": {
+       "mDataValue": "TooltipMult",
+       "__type": "NamedDataValueCalculationPart"
+      },
+      "mModifiedGameCalculation": "BonusArmor",
+      "__type": "GameCalculationModified"
+     }
+    },
+    "cooldown": [
+     20,
+     20,
+     20,
+     20,
+     20,
+     20,
+     20
+    ],
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Crushing Blow",
+   "description": "Wukong's next attack gains attack range, deals bonus damage, and reduces the target's armor for a few seconds.",
+   "tooltip": "Wukong and his <keywordMajor>Clone's</keywordMajor> next Attack gains {{ attackrangebonus }} range, deals an additional <physicalDamage>{{ bonusdamagett }} physical damage</physicalDamage>, and removes <scaleArmor>{{ armorshredpercent*100 }}% Armor</scaleArmor> for {{ shredduration }} seconds.<br /><br />This Ability's cooldown is reduced by {{ cooldowndecrease }} seconds every time Wukong or his <keywordMajor>Clone</keywordMajor> hit an enemy with an Attack or Ability.<br /><br /><rules>This Ability triggers spell effects upon dealing damage.</rules>{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    8,
+    7.5,
+    7,
+    6.5,
+    6
+   ],
+   "ddCost": [
+    20,
+    20,
+    20,
+    20,
+    20
+   ],
+   "ddRange": [
+    250,
+    275,
+    300,
+    325,
+    350
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Armor Reduction %",
+     "Range",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ armorshredpercent*100.000000 }}% -> {{ armorshredpercentnl*100.000000 }}%",
+     "{{ attackrangebonus }} -> {{ attackrangebonusNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "MonkeyKingDoubleAttack": {
+     "DataValues": {
+      "BaseDamage": [
+       -5,
+       20,
+       45,
+       70,
+       95,
+       120,
+       145
+      ],
+      "ADRatio": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ],
+      "ArmorShredPercent": [
+       0.05000000074505806,
+       0.10000000149011612,
+       0.15000000596046448,
+       0.20000000298023224,
+       0.25,
+       0.30000001192092896,
+       0.3499999940395355
+      ],
+      "ShredDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "BuffDuration": [
+       6,
+       6,
+       6,
+       6,
+       6,
+       6,
+       6
+      ],
+      "AttackRangeBonus": [
+       125,
+       135,
+       145,
+       155,
+       165,
+       175,
+       185
+      ],
+      "CooldownDecrease": [
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "ADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "BonusDamageTT": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 2,
+         "mStatFormula": 2,
+         "mDataValue": "ADRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      8,
+      8,
+      7.5,
+      7,
+      6.5,
+      6,
+      6
+     ],
+     "castRange": [
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "mana": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "missileSpeed": 20,
+     "castTime": 0.5,
+     "tags": [
+      "PositiveEffect_EmpowerAttack",
+      "Trait_AttackReset",
+      "Trait_DamageAbility",
+      "Trait_Strike"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Warrior Trickster",
+   "description": "Wukong becomes <font color='#91d7ee'>Invisible</font> and dashes in a direction, leaving behind a clone that will attack nearby enemies.",
+   "tooltip": "Wukong dashes and becomes <keywordStealth>Invisible</keywordStealth> for {{ stealthduration }} second, leaving behind a stationary <keywordMajor>Clone</keywordMajor> for {{ cloneduration }} seconds.<br /><br />The <keywordMajor>Clone</keywordMajor> Attacks nearby enemies Wukong has recently damaged and will mimic his ultimate, each dealing {{ clonedamagemod*100 }}% of normal damage.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    22,
+    21,
+    20,
+    19,
+    18
+   ],
+   "ddCost": [
+    60,
+    55,
+    50,
+    45,
+    40
+   ],
+   "ddRange": [
+    275,
+    275,
+    275,
+    275,
+    275
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage Percent",
+     "Cooldown",
+     "@AbilityResourceName@ Cost"
+    ],
+    "effect": [
+     "{{ clonedamagemod*100.000000 }}% -> {{ clonedamagemodnl*100.000000 }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "MonkeyKingDecoy": {
+     "DataValues": {
+      "CloneDamageMod": [
+       0.3499999940395355,
+       0.4000000059604645,
+       0.44999998807907104,
+       0.5,
+       0.550000011920929,
+       0.6000000238418579,
+       0.6499999761581421
+      ],
+      "StealthDuration": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "CloneDuration": [
+       4,
+       4,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "DashSpeed": [
+       900,
+       900,
+       900,
+       900,
+       900,
+       900,
+       900
+      ],
+      "RangeClamp": [
+       300,
+       300,
+       300,
+       300,
+       300,
+       300,
+       300
+      ],
+      "MinRange": [
+       100,
+       100,
+       100,
+       100,
+       100,
+       100,
+       100
+      ]
+     },
+     "calcs": {},
+     "cooldown": [
+      22,
+      22,
+      21,
+      20,
+      19,
+      18,
+      18
+     ],
+     "castRange": [
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000,
+      10000
+     ],
+     "mana": [
+      60,
+      55,
+      50,
+      45,
+      40,
+      40
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "PositiveEffect_MoveBlock",
+      "Trait_PlayerSelectedDashDirection",
+      "Trait_Invisibility",
+      "Trait_CreateClone",
+      "Trait_SignatureSpell",
+      "Trait_Low_Damage"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Nimbus Strike",
+   "description": "Wukong dashes to a targeted enemy and sends out images to attack enemies near his target, dealing damage to each enemy struck.",
+   "tooltip": "Wukong dashes to an enemy, sending out <keywordMajor>Clones</keywordMajor> that mimic the dash to up to {{ extratargets }} additional enemies nearby. Each enemy struck takes <magicDamage>{{ totaldamage }} magic damage</magicDamage>. He and his <keywordMajor>Clone</keywordMajor> gain <attackSpeed>{{ attackspeed*100 }}% Attack Speed</attackSpeed> for {{ attackspeedduration }} seconds.<br /><br />{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    10,
+    9.25,
+    8.5,
+    7.75,
+    7
+   ],
+   "ddCost": [
+    30,
+    35,
+    40,
+    45,
+    50
+   ],
+   "ddRange": [
+    650,
+    650,
+    650,
+    650,
+    650
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Attack Speed",
+     "Cooldown",
+     "@AbilityResourceName@ Cost"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ attackspeed*100.000000 }}% -> {{ attackspeednl*100.000000 }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "MonkeyKingNimbus": {
+     "DataValues": {
+      "BaseDamage": [
+       40,
+       80,
+       120,
+       160,
+       200,
+       240,
+       280
+      ],
+      "AttackSpeed": [
+       0.3499999940395355,
+       0.4000000059604645,
+       0.44999998807907104,
+       0.5,
+       0.550000011920929,
+       0.6000000238418579,
+       0.6499999761581421
+      ],
+      "AttackSpeedDuration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "DashSpeed": [
+       1050,
+       1050,
+       1050,
+       1050,
+       1050,
+       1050,
+       1050
+      ],
+      "EndPointOffsetDistance": [
+       75,
+       75,
+       75,
+       75,
+       75,
+       75,
+       75
+      ],
+      "ExtraTargets": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "ExtraTargetRange": [
+       700,
+       700,
+       700,
+       700,
+       700,
+       700,
+       700
+      ],
+      "MonsterDamageRatio": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 1,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalDamageMonsters": {
+       "mMultiplier": {
+        "mDataValue": "MonsterDamageRatio",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mModifiedGameCalculation": "TotalDamage",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      10,
+      10,
+      9.25,
+      8.5,
+      7.75,
+      7,
+      7
+     ],
+     "castRange": [
+      650,
+      650,
+      650,
+      650,
+      650,
+      650,
+      650
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "mana": [
+      30,
+      35,
+      40,
+      45,
+      50,
+      50
+     ],
+     "missileSpeed": 2200,
+     "tags": [
+      "PositiveEffect_MoveBlock",
+      "Trait_DamageAbility",
+      "Trait_CreateClone",
+      "Trait_Low_Damage",
+      "Trait_AoE"
+     ]
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Cyclone",
+   "description": "Wukong's extends his staff and spins it around repeatedly, gaining Move Speed.<br><br>Enemies struck take damage and are knocked up.",
+   "tooltip": "Wukong gains <speed>{{ movespeed*100 }}% Move Speed</speed> and spins his staff, <status>Knocking Up</status> nearby enemies for {{ knockupduration }} seconds and take <physicalDamage>{{ totaldamagett }} plus {{ percenthpdamagett }} max Health physical damage</physicalDamage> over {{ spinduration }} seconds.<br /><br />This Ability can be cast a second time within {{ recastwindow }} seconds before going on cooldown.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    130,
+    110,
+    90
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    315,
+    315,
+    315
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Maximum Health Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ basepercentmaxhpdmgpersec*200.000000 }}% -> {{ basepercentmaxhpdmgpersecnl*200.000000 }}%",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "MonkeyKingSpinToWin": {
+     "DataValues": {
+      "KnockupDuration": [
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579,
+       0.6000000238418579
+      ],
+      "SpinDuration": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "MoveSpeed": [
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224
+      ],
+      "BasePercentMaxHPDmgPerSec": [
+       0.019999999552965164,
+       0.03999999910593033,
+       0.05999999865889549,
+       0.07999999821186066,
+       0.10000000149011612,
+       0.11999999731779099,
+       0.14000000059604645
+      ],
+      "SecondsPerTick": [
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25,
+       0.25
+      ],
+      "RecastWindow": [
+       8,
+       8,
+       8,
+       8,
+       8,
+       8,
+       8
+      ],
+      "LockoutTimeBetweenCasts": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "ADRatioPerSecond": [
+       1.375,
+       1.375,
+       1.375,
+       1.375,
+       1.375,
+       1.375,
+       1.375
+      ]
+     },
+     "calcs": {
+      "DamagePerSecondTotal": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mStat": 2,
+         "mDataValue": "ADRatioPerSecond",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{26c20668}": {
+       "mExpandedTooltipCalculationDisplay": 5,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BasePercentMaxHPDmgPerSec",
+         "__type": "NamedDataValueCalculationPart"
+        }
+       ],
+       "mDisplayAsPercent": true,
+       "__type": "GameCalculation"
+      },
+      "MonsterCap": {
+       "mFormulaParts": [
+        {
+         "mLevel1Value": 200,
+         "mBreakpoints": [
+          {
+           "mLevel": 11,
+           "mAdditionalBonusAtThisLevel": 200,
+           "__type": "Breakpoint"
+          },
+          {
+           "mLevel": 16,
+           "mAdditionalBonusAtThisLevel": 200,
+           "__type": "Breakpoint"
+          }
+         ],
+         "__type": "ByCharLevelBreakpointsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "TotalDamageTT": {
+       "mMultiplier": {
+        "mDataValue": "SpinDuration",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mSimpleTooltipCalculationDisplay": 6,
+       "tooltipOnly": true,
+       "mModifiedGameCalculation": "DamagePerSecondTotal",
+       "__type": "GameCalculationModified"
+      },
+      "PercentHPDamageTT": {
+       "mMultiplier": {
+        "mDataValue": "SpinDuration",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mExpandedTooltipCalculationDisplay": 5,
+       "tooltipOnly": true,
+       "mModifiedGameCalculation": "{26c20668}",
+       "__type": "GameCalculationModified"
+      },
+      "MonsterCapTT": {
+       "mMultiplier": {
+        "mDataValue": "SpinDuration",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mSimpleTooltipCalculationDisplay": 6,
+       "tooltipOnly": true,
+       "mModifiedGameCalculation": "MonsterCap",
+       "__type": "GameCalculationModified"
+      }
+     },
+     "cooldown": [
+      10,
+      130,
+      110,
+      90,
+      90,
+      90,
+      10
+     ],
+     "castRange": [
+      660,
+      660,
+      660,
+      660,
+      660,
+      660,
+      660
+     ],
+     "castRadius": [
+      35,
+      35,
+      35,
+      35,
+      35,
+      35,
+      35
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      0
+     ],
+     "missileSpeed": 700,
+     "lineWidth": 160,
+     "tags": [
+      "Trait_Ultimate",
+      "Trait_ImmobilizingCCSpell",
+      "Trait_DamageAbility",
+      "Trait_RecastOrReplaceSpell",
+      "Trait_DoT",
+      "Trait_Ranged_Zone",
+      "Trait_AoE"
+     ]
+    },
+    "MonkeyKingSpinToWinLeave": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      135,
+      120,
+      105,
+      90,
+      90,
+      90,
+      90
+     ],
+     "castRange": [
+      700,
+      700,
+      700,
+      700,
+      700,
+      700,
+      700
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 0
+    }
+   }
+  }
+ ]
+}

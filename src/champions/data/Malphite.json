@@ -1,0 +1,879 @@
+{
+ "id": "Malphite",
+ "version": "16.22.1",
+ "sources": {
+  "text": "Riot Data Dragon",
+  "numbers": "CommunityDragon client export"
+ },
+ "name": "Malphite",
+ "title": "Shard of the Monolith",
+ "tags": [
+  "Tank",
+  "Mage"
+ ],
+ "resource": "Mana",
+ "stats": {
+  "hp": 665,
+  "hpperlevel": 104,
+  "mp": 280,
+  "mpperlevel": 60,
+  "movespeed": 335,
+  "armor": 40,
+  "armorperlevel": 4.95,
+  "spellblock": 28,
+  "spellblockperlevel": 2.05,
+  "attackrange": 125,
+  "hpregen": 7,
+  "hpregenperlevel": 0.55,
+  "mpregen": 7.3,
+  "mpregenperlevel": 0.55,
+  "crit": 0,
+  "critperlevel": 0,
+  "attackdamage": 62,
+  "attackdamageperlevel": 0,
+  "attackspeedperlevel": 3.4,
+  "attackspeed": 0.736
+ },
+ "basicAttack": {
+  "range": 125,
+  "attackSpeed": 0.736,
+  "asRatio": {
+   "baseValue": 0.6380000114440918,
+   "__type": "ModifiableFloat"
+  },
+  "windup": -0.0503188781440258
+ },
+ "passive": {
+  "name": "Granite Shield",
+  "description": "Malphite is shielded by a layer of rock which absorbs damage up to 10% of his maximum Health. If Malphite has not been hit for a few seconds, this effect recharges.",
+  "values": {
+   "MalphiteShield": {
+    "DataValues": {},
+    "calcs": {
+     "PassiveCooldown": {
+      "mSimpleTooltipCalculationDisplay": 6,
+      "mFormulaParts": [
+       {
+        "mLevel1Value": 8,
+        "mBreakpoints": [
+         {
+          "mLevel": 7,
+          "mAdditionalBonusAtThisLevel": -1,
+          "__type": "Breakpoint"
+         },
+         {
+          "mLevel": 13,
+          "mAdditionalBonusAtThisLevel": -1,
+          "__type": "Breakpoint"
+         }
+        ],
+        "__type": "ByCharLevelBreakpointsCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     },
+     "TotalShield": {
+      "mSimpleTooltipCalculationDisplay": 6,
+      "mFormulaParts": [
+       {
+        "mStat": 12,
+        "mCoefficient": 0.10000000149011612,
+        "__type": "StatByCoefficientCalculationPart"
+       }
+      ],
+      "__type": "GameCalculation"
+     }
+    },
+    "castRange": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ "spells": [
+  {
+   "slot": "Q",
+   "name": "Seismic Shard",
+   "description": "Malphite sends a shard of the earth through the ground at his foe, dealing damage upon impact and stealing Move Speed for 3 seconds.",
+   "tooltip": "Malphite launches a shard of earth at an enemy, dealing <magicDamage>{{ qdamagecalc }} magic damage</magicDamage> and <status>Slowing</status> them by {{ speedsteal }}% for {{ slowduration }} seconds. Malphite also steals the amount <status>Slowed</status>, gaining it as <speed>Move Speed</speed> for {{ slowduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    8,
+    8,
+    8,
+    8,
+    8
+   ],
+   "ddCost": [
+    70,
+    75,
+    80,
+    85,
+    90
+   ],
+   "ddRange": [
+    625,
+    625,
+    625,
+    625,
+    625
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "@AbilityResourceName@ Cost",
+     "Damage",
+     "Slow"
+    ],
+    "effect": [
+     "{{ cost }} -> {{ costNL }}",
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ speedsteal }}% -> {{ speedstealNL }}%"
+    ]
+   },
+   "game": {
+    "SeismicShard": {
+     "DataValues": {
+      "SpeedSteal": [
+       20,
+       20,
+       25,
+       30,
+       35,
+       40,
+       45
+      ],
+      "SlowDuration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "BaseDamage": [
+       20,
+       70,
+       120,
+       170,
+       220,
+       270,
+       320
+      ]
+     },
+     "calcs": {
+      "QDamageCalc": {
+       "tooltipOnly": true,
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.6000000238418579,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8
+     ],
+     "castRange": [
+      625,
+      625,
+      625,
+      625,
+      625,
+      625,
+      625
+     ],
+     "castRadius": [
+      780,
+      780,
+      780,
+      780,
+      780,
+      780,
+      780
+     ],
+     "mana": [
+      70,
+      75,
+      80,
+      85,
+      90,
+      95
+     ],
+     "missileSpeed": 1200,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_SignatureSpell"
+     ]
+    },
+    "SeismicShardBuff": {
+     "DataValues": {},
+     "calcs": {}
+    }
+   }
+  },
+  {
+   "slot": "W",
+   "name": "Thunderclap",
+   "description": "Malphite attacks with such force that it creates a sonic boom. For the next few seconds, his attacks create aftershocks in front of him.",
+   "tooltip": "<spellPassive>Passive: </spellPassive>Malphite gains <scaleArmor>{{ bonusarmorpassive*100 }}% Armor (%i:scaleArmor%{{ f1 }})</scaleArmor>. This effect is increased to <scaleArmor>{{ bonusarmorpassive*300 }}% (%i:scaleArmor%{{ f2 }})</scaleArmor> while <spellName>Granite Shield</spellName> is active.<br /><br /><spellPassive>Active: </spellPassive>Malphite's next Attack deals an additional <physicalDamage>{{ totalbonusdamage }} physical damage</physicalDamage> and creates an aftershock which deals <physicalDamage>{{ thunderclapsplash }} physical damage</physicalDamage> %i:OnHit% <OnHit>On-Hit</OnHit> in their direction. His Attacks continue to create aftershocks %i:OnHit% <OnHit>On-Hit</OnHit> for the next {{ thunderclapbuffduration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    10,
+    9.5,
+    9,
+    8.5,
+    8
+   ],
+   "ddCost": [
+    30,
+    35,
+    40,
+    45,
+    50
+   ],
+   "ddRange": [
+    400,
+    400,
+    400,
+    400,
+    400
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "@AbilityResourceName@ Cost",
+     "Armor",
+     "Damage",
+     "Aftershock Splash Damage",
+     "Cooldown"
+    ],
+    "effect": [
+     "{{ cost }} -> {{ costNL }}",
+     "{{ bonusarmorpassive*100.000000 }}% -> {{ bonusarmorpassivenl*100.000000 }}%",
+     "{{ thunderclapbasedamage }} -> {{ thunderclapbasedamageNL }}",
+     "{{ thunderclapsplashdamage }} -> {{ thunderclapsplashdamageNL }}",
+     "{{ cooldown }} -> {{ cooldownNL }}"
+    ]
+   },
+   "game": {
+    "Obduracy": {
+     "DataValues": {
+      "ThunderclapBuffDuration": [
+       5,
+       5,
+       5,
+       5,
+       5,
+       5,
+       5
+      ],
+      "ThunderclapBaseDamage": [
+       20,
+       30,
+       40,
+       50,
+       60,
+       70,
+       80
+      ],
+      "ThunderclapSlowDamage": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "ThunderclapSplashAP": [
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896,
+       0.30000001192092896
+      ],
+      "ThunderclapSplashArmor": [
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448
+      ],
+      "ThunderclapBaseDamageAPRatio": [
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224,
+       0.20000000298023224
+      ],
+      "ThunderclapBaseDamageArmorRatio": [
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448,
+       0.15000000596046448
+      ],
+      "ThunderclapSplashDamage": [
+       5,
+       15,
+       25,
+       35,
+       45,
+       55,
+       65
+      ],
+      "BonusArmorPassive": [
+       0.05000000074505806,
+       0.10000000149011612,
+       0.15000000596046448,
+       0.20000000298023224,
+       0.25,
+       0.30000001192092896,
+       0.3499999940395355
+      ],
+      "BonusArmorPassiveMultiplier": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ],
+      "ThunderClapSplashRange": [
+       400,
+       400,
+       400,
+       400,
+       400,
+       400,
+       400
+      ],
+      "MonsterDamageMod": [
+       1.7999999523162842,
+       1.7999999523162842,
+       1.7999999523162842,
+       1.7999999523162842,
+       1.7999999523162842,
+       1.7999999523162842,
+       1.7999999523162842
+      ]
+     },
+     "calcs": {
+      "TotalBonusDamage": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "ThunderclapBaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "ThunderclapBaseDamageAPRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 1,
+         "mDataValue": "ThunderclapBaseDamageArmorRatio",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{185669f9}": {
+       "mMultiplier": {
+        "mDataValue": "ThunderclapSlowDamage",
+        "__type": "NamedDataValueCalculationPart"
+       },
+       "mSimpleTooltipCalculationDisplay": 0,
+       "mModifiedGameCalculation": "TotalBonusDamage",
+       "__type": "GameCalculationModified"
+      },
+      "ThunderclapSplash": {
+       "mSimpleTooltipCalculationDisplay": 6,
+       "mFormulaParts": [
+        {
+         "mDataValue": "ThunderclapSplashDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mDataValue": "ThunderclapSplashAP",
+         "__type": "StatByNamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 1,
+         "mDataValue": "ThunderclapSplashArmor",
+         "__type": "StatByNamedDataValueCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      },
+      "{71941255}": {
+       "tooltipOnly": true,
+       "mFormulaParts": [
+        {
+         "mPart1": {
+          "mDataValue": "BonusArmorPassive",
+          "__type": "NamedDataValueCalculationPart"
+         },
+         "mPart2": {
+          "mDataValue": "BonusArmorPassiveMultiplier",
+          "__type": "NamedDataValueCalculationPart"
+         },
+         "__type": "ProductOfSubPartsCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      10,
+      10,
+      9.5,
+      9,
+      8.5,
+      8,
+      8
+     ],
+     "castRadius": [
+      350,
+      350,
+      350,
+      350,
+      350,
+      350,
+      350
+     ],
+     "mana": [
+      30,
+      35,
+      40,
+      45,
+      50,
+      55
+     ],
+     "missileSpeed": 0,
+     "tags": [
+      "Trait_AttackReset",
+      "Trait_DamageAbility",
+      "Trait_AttackBuff_Duration",
+      "Trait_Strike",
+      "Trait_AoE"
+     ]
+    },
+    "ObduracyAttack": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "castRange": [
+      600,
+      600,
+      600,
+      600,
+      600,
+      600,
+      600
+     ],
+     "castRadius": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+     ],
+     "missileSpeed": 1000
+    },
+    "MalphiteThunderclap": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16
+     ],
+     "castRadius": [
+      350,
+      350,
+      350,
+      350,
+      350,
+      350,
+      350
+     ],
+     "mana": [
+      50,
+      55,
+      60,
+      65,
+      70,
+      75
+     ],
+     "missileSpeed": 0
+    },
+    "MalphiteObduracyEffect": {
+     "buff": true
+    },
+    "MalphiteCleave": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16
+     ],
+     "castRadius": [
+      350,
+      350,
+      350,
+      350,
+      350,
+      350,
+      350
+     ],
+     "mana": [
+      50,
+      55,
+      60,
+      65,
+      70,
+      75
+     ],
+     "missileSpeed": 0
+    }
+   }
+  },
+  {
+   "slot": "E",
+   "name": "Ground Slam",
+   "description": "Malphite slams the ground, sending out a shockwave that deals magic damage based on his Armor and reduces the Attack Speed of enemies for a short duration.",
+   "tooltip": "Malphite slams the ground, dealing <magicDamage>{{ edamagecalc }} magic damage</magicDamage> and reducing <attackSpeed>Attack Speed by {{ asreduction }}%</attackSpeed> for {{ duration }} seconds.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    7,
+    7,
+    7,
+    7,
+    7
+   ],
+   "ddCost": [
+    50,
+    55,
+    60,
+    65,
+    70
+   ],
+   "ddRange": [
+    400,
+    400,
+    400,
+    400,
+    400
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 5,
+   "leveltip": {
+    "label": [
+     "Damage",
+     "Attack Speed Reduction",
+     "@AbilityResourceName@ Cost"
+    ],
+    "effect": [
+     "{{ basedamage }} -> {{ basedamageNL }}",
+     "{{ asreduction }}% -> {{ asreductionNL }}%",
+     "{{ cost }} -> {{ costNL }}"
+    ]
+   },
+   "game": {
+    "Landslide": {
+     "DataValues": {
+      "BaseDamage": [
+       25,
+       60,
+       95,
+       130,
+       165,
+       200,
+       235
+      ],
+      "ASReduction": [
+       25,
+       30,
+       35,
+       40,
+       45,
+       50,
+       55
+      ],
+      "Duration": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ]
+     },
+     "calcs": {
+      "EDamageCalc": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mStat": 1,
+         "mCoefficient": 0.4000000059604645,
+         "__type": "StatByCoefficientCalculationPart"
+        },
+        {
+         "mCoefficient": 0.6000000238418579,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      7,
+      7,
+      7,
+      7,
+      7,
+      7,
+      7
+     ],
+     "castRadius": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+     ],
+     "mana": [
+      50,
+      55,
+      60,
+      65,
+      70,
+      75
+     ],
+     "missileSpeed": 0,
+     "castTime": 0.2418999969959259,
+     "tags": [
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    },
+    "LandslideDebuff": {
+     "buff": true
+    }
+   }
+  },
+  {
+   "slot": "R",
+   "name": "Unstoppable Force",
+   "description": "Malphite launches himself to a location at high speed, damaging enemies and knocking them into the air.",
+   "tooltip": "Malphite charges with the force of a landslide, dashing Unstoppably. At the end of the dash, Malphite <status>Knocks Up</status> for {{ knockupduration }} seconds and deals <magicDamage>{{ totaldamage }} magic damage</magicDamage>.{{ spellmodifierdescriptionappend }}",
+   "ddCooldown": [
+    130,
+    115,
+    100
+   ],
+   "ddCost": [
+    100,
+    100,
+    100
+   ],
+   "ddRange": [
+    1000,
+    1000,
+    1000
+   ],
+   "costType": "{{ abilityresourcename }}",
+   "maxrank": 3,
+   "leveltip": {
+    "label": [
+     "Cooldown",
+     "Damage"
+    ],
+    "effect": [
+     "{{ cooldown }} -> {{ cooldownNL }}",
+     "{{ basedamage }} -> {{ basedamageNL }}"
+    ]
+   },
+   "game": {
+    "UFSlash": {
+     "DataValues": {
+      "BaseDamage": [
+       100,
+       200,
+       300,
+       400,
+       500,
+       600,
+       700
+      ],
+      "KnockupDuration": [
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5,
+       1.5
+      ]
+     },
+     "calcs": {
+      "TotalDamage": {
+       "mFormulaParts": [
+        {
+         "mDataValue": "BaseDamage",
+         "__type": "NamedDataValueCalculationPart"
+        },
+        {
+         "mCoefficient": 0.8999999761581421,
+         "__type": "StatByCoefficientCalculationPart"
+        }
+       ],
+       "__type": "GameCalculation"
+      }
+     },
+     "cooldown": [
+      130,
+      130,
+      115,
+      100,
+      100,
+      100,
+      100
+     ],
+     "castRange": [
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000,
+      1000
+     ],
+     "castRadius": [
+      270,
+      270,
+      270,
+      270,
+      270,
+      270,
+      270
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      0,
+      0,
+      0
+     ],
+     "missileSpeed": 700,
+     "lineWidth": 160,
+     "tags": [
+      "Trait_Ultimate",
+      "PositiveEffect_MoveBlock",
+      "Trait_ChannelSpell",
+      "Trait_ImmobilizingCCSpell",
+      "Trait_PlayerSelectedDashDirection",
+      "Trait_DamageAbility",
+      "Trait_AoE"
+     ]
+    },
+    "UnstoppableForceStun": {
+     "DataValues": {},
+     "calcs": {},
+     "cooldown": [
+      75,
+      75,
+      75,
+      75,
+      75,
+      75,
+      75
+     ],
+     "castRange": [
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+     ],
+     "castRadius": [
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+     ],
+     "mana": [
+      100,
+      100,
+      100,
+      0,
+      0,
+      0
+     ],
+     "missileSpeed": 700,
+     "lineWidth": 160
+    }
+   }
+  }
+ ]
+}
