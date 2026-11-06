@@ -1,6 +1,7 @@
 // 3D view of the match: a Three.js scene drawn behind the 2D overlay canvas.
 // Characters are CC0 KayKit models by Kay Lousberg (kaylousberg.com); the map, structures and
 // foliage are built here from primitives. The simulation never reads anything in this file.
+import { buildOutfit } from './costume';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -515,7 +516,8 @@ const CHAMP_SIZE: Record<string, number> = {
 // Champions without a hand-picked body get one from their class, tinted with the dominant colour of their
 // Data Dragon icon so the roster reads as different characters. (Riot's models are not available.)
 const HUES: Record<string, string> = {};
-export const setChampHue = (id: string, c: string) => { HUES[id] = c; };
+const ACCENTS: Record<string, string> = {};
+export const setChampHue = (id: string, c: string, accent?: string) => { HUES[id] = c; if (accent) ACCENTS[id] = accent; };
 const dyn = new Map<string, HeroCfg>();
 interface ChampLike { id: string; tags?: string[]; ranged: boolean; color: string; hp?: number }
 function heroFor(def: ChampLike): HeroCfg {
@@ -623,10 +625,10 @@ function makeAvatar(u: WUnit): Avatar | null {
   let hue: THREE.Color | null = null;
   if (u.kind === 'champ') {
     const h = heroFor(u.champ!.def);
-    file = h.file;
+    file = h.file === 'Rogue_Hooded' ? 'Rogue' : h.file; // bare head: outfits add hoods and hair
     attack = h.attack;
     abilities = h.abilities;
-    hide = h.hide;
+    hide = PROPS[h.file]; // the outfit brings its own weapons
     if (h.hue) hue = new THREE.Color(h.hue);
   } else {
     const m = MINIONS[u.mtype ?? 'melee'];
@@ -644,7 +646,7 @@ function makeAvatar(u: WUnit): Avatar | null {
   model.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
-    if (hide.includes(mesh.name)) {
+    if (hide.includes(mesh.name) || (u.kind === 'champ' && /_(Hat|Helmet|Cape)$/.test(mesh.name))) {
       mesh.visible = false;
       return;
     }
@@ -679,6 +681,16 @@ function makeAvatar(u: WUnit): Avatar | null {
     });
     b.add(w);
   };
+  if (u.kind === 'champ') {
+    const d = u.champ!.def;
+    const main = HUES[d.id] ?? d.color;
+    const parts = buildOutfit(d.id, d.tags ?? [], d.ranged, { main, accent: ACCENTS[d.id] ?? main });
+    for (const part of parts) {
+      const b = findBone(model, part.bone);
+      if (b) b.add(part.obj);
+      if (import.meta.env.DEV && (window as any).__dbgOutfit) { const bb = new THREE.Box3().setFromObject(part.obj); console.log('PART', d.id, part.bone, !!b, b?.type, JSON.stringify(bb.min.toArray().map((x) => +x.toFixed(2))), JSON.stringify(bb.max.toArray().map((x) => +x.toFixed(2)))); }
+    }
+  }
   if (weapon) attach(weapon, 'handslot.r');
   if (offhand) attach(offhand, 'handslot.l');
 

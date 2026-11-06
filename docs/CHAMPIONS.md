@@ -46,8 +46,10 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
   the CommunityDragon calculations; **the ability shape (skillshot / ground target / dash / self nova) and CC durations are
   inferred**, so their kits are approximations (no recasts, transforms, summons or passives beyond text). A few spells that
   did not parse deal no damage (e.g. Kha'Zix, Yunara) and Jax E's damage is zeroed (bogus calc).
-- **Models**: Riot's models are not available. Champions use CC0 KayKit bodies picked by class and tinted with the dominant
-  colour of the champion icon; icons are the real Data Dragon art.
+- **Models**: Riot's models are proprietary and not used. Champions share the CC0 KayKit rigs and get procedural outfits
+  (`src/costume.ts`): hair, ears, horns, tails, helmets, hoods, capes, wings, signature weapons. The 20 scripted champions have
+  hand-built outfits; the other 153 get one generated from class, name hash and icon colours (main + accent), so they differ
+  in silhouette and colour but are not likenesses. Icons are the real Data Dragon art.
 - **Items**: real SR shop with recipes (owned components are consumed and lower the price). Only HP, AD, AP, armor, MR,
   attack speed, move speed, lifesteal, ability haste and mana are simulated; crit, on-hit and active effects are text only.
   Recommended builds are generated per class by scoring items against what the engine simulates (not Riot's builds).

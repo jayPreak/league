@@ -5783,13 +5783,19 @@ function loadChampHues() {
       cx.drawImage(im, 0, 0, 12, 12);
       const d = cx.getImageData(0, 0, 12, 12).data;
       let r = 0, g = 0, b = 0, w = 0;
+      let ar = 0, ag = 0, ab = 0, aw = 0;
       for (let i = 0; i < d.length; i += 4) {
+        const s2 = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+        const br = (d[i] + d[i + 1] + d[i + 2]) / 3;
+        const aw2 = (s2 * s2 * (br + 40)) / 1000;
+        ar += d[i] * aw2; ag += d[i + 1] * aw2; ab += d[i + 2] * aw2; aw += aw2;
         const mx = Math.max(d[i], d[i + 1], d[i + 2]);
         const sat = mx - Math.min(d[i], d[i + 1], d[i + 2]);
         const wt = 1 + sat / 40;
         r += d[i] * wt; g += d[i + 1] * wt; b += d[i + 2] * wt; w += wt;
       }
-      setChampHue(c.id, '#' + [r, g, b].map((v) => Math.round(v / w).toString(16).padStart(2, '0')).join(''));
+      const hex = (a: number, b2: number, c2: number, k: number) => '#' + [a, b2, c2].map((v) => Math.round(v / k).toString(16).padStart(2, '0')).join('');
+      setChampHue(c.id, hex(r, g, b, w), aw > 0 ? hex(ar, ag, ab, aw) : undefined);
     };
     im.src = `${import.meta.env.BASE_URL}img/champ/${c.key ?? c.id}.png`;
   }
@@ -5903,5 +5909,5 @@ Object.assign(window, {
 
 // dev-only handle for smoke-testing champion kits from the console
 if (import.meta.env.DEV) {
-  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp, isWall, placeWard, CAMPS, dealDamage, kill };
+  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp, isWall, placeWard, CAMPS, dealDamage, kill, enterMatch };
 }
