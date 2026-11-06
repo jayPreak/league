@@ -2166,7 +2166,7 @@ function aiUtility(u: Unit, foe: Unit | null) {
       // map-wide ultimates finish off low enemies anywhere
       const low = G.units.find((e) => e.champ && e.team !== u.team && targetable(e) && e.hp / e.maxHp < 0.3 && dist(e, u) <= a.range);
       if (low && Math.random() < 0.3) cast(u, s, low.x, low.y);
-    } else if (foe && s < 3 && (a.kind === 'bolt' || (a.kind === 'zone' && !a.allyHeal)) && u.mp > costOf(c, s) * 2.5 && Math.random() < 0.35) {
+    } else if (foe && s < 3 && (a.kind === 'bolt' || (a.kind === 'zone' && !a.allyHeal)) && u.mp >= costOf(c, s) * 2.5 && Math.random() < 0.35) {
       aiCast(u, s, foe); // poke while trading in lane
     }
   });
@@ -2209,7 +2209,7 @@ function aiJungle(u: Unit) {
     if (c.spellCds[1] <= 0 && dist(u, target) < 500 && target.hp <= smiteDamage(u) && (big || u.hp / u.maxHp < 0.45 || c.level < 4)) castSmite(u, target);
     if (dist(u, target) < 700) for (let s = 0; s < 3; s++) {
       const a = c.def.abilities[s];
-      if (c.cds[s] <= 0 && c.ranks[s] > 0 && u.mp > costOf(c, s) * 2 && a.kind !== 'ally' && !(a.kind === 'buff' && a.stealth)) cast(u, s, target.x, target.y);
+      if (c.cds[s] <= 0 && c.ranks[s] > 0 && u.mp >= costOf(c, s) * 2 && a.kind !== 'ally' && !(a.kind === 'buff' && a.stealth)) cast(u, s, target.x, target.y);
     }
     c.order = { type: 'attack', target };
     return;
@@ -5341,5 +5341,5 @@ Object.assign(window, {
 
 // dev-only handle for smoke-testing champion kits from the console
 if (import.meta.env.DEV) {
-  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf };
+  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp };
 }
