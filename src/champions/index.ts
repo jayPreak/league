@@ -1,7 +1,7 @@
 // Data-driven roster: stats, text, cooldowns, costs and ranges come from the reference database
 // (src/champions/data, generated from Riot Data Dragon + CommunityDragon). Only presentation and
 // AI hints live in ROSTER below; behaviour lives in src/kits.
-import type { AbilityDef, AbilityKind, ChampDef } from '../data';
+import type { AbilityDef, AbilityKind, AimShape, ChampDef } from '../data';
 import { REF } from './ref';
 
 interface AbilityHint {
@@ -55,6 +55,45 @@ export const ROSTER: RosterEntry[] = [
   { id: 'ahri', color: '#ff8ac8', build: B.mage, hints: [h('bolt', '#ffb8e0', { width: 100, speed: 2500 }), h('buff', '#ff9ac8'), h('bolt', '#ff6ab0', { width: 120, speed: 1550 }), h('dash', '#ffc0e8')] },
 ];
 
+
+// Indicator shapes straight from the in-game casting behaviour (widths/radii from the reference data where
+// it lists them): line:<width>:<reach>, circle:<radius>:<reach>, cone:<degrees>:<reach>, self:<radius>,
+// target:<reach>, none.
+const AIM: Record<string, [string, string, string, string]> = {
+  masteryi: ['target:600', 'none', 'none', 'none'],
+  twitch: ['none', 'circle:285:950', 'self:1200', 'line:120:850'],
+  monkeyking: ['none', 'line:60:300', 'target:650', 'self:315'],
+  yuumi: ['line:65:1100', 'target:700', 'self:500', 'line:100:1100'],
+  naafiri: ['line:90:900', 'none', 'line:100:450', 'target:900'],
+  irelia: ['target:600', 'line:120:825', 'circle:70:775', 'line:160:950'],
+  lux: ['line:80:1175', 'line:150:1150', 'circle:295:1100', 'line:190:3340'],
+  rengar: ['none', 'self:450', 'line:70:1000', 'none'],
+  garen: ['none', 'none', 'self:325', 'target:400'],
+  ashe: ['none', 'cone:57:1200', 'none', 'line:130:3000'],
+  annie: ['target:625', 'cone:50:600', 'target:800', 'circle:290:600'],
+  malphite: ['target:625', 'none', 'self:400', 'circle:300:1000'],
+  ezreal: ['line:120:1150', 'line:160:1150', 'circle:60:475', 'line:320:3000'],
+  jinx: ['none', 'line:120:1450', 'circle:200:925', 'line:280:3000'],
+  leona: ['none', 'self:450', 'line:100:875', 'circle:250:1200'],
+  blitzcrank: ['line:140:1079', 'none', 'none', 'self:600'],
+  morgana: ['line:140:1250', 'circle:275:900', 'target:800', 'self:600'],
+  zed: ['line:100:900', 'line:60:650', 'self:290', 'target:625'],
+  darius: ['self:425', 'none', 'cone:70:535', 'target:460'],
+  ahri: ['line:100:970', 'self:700', 'line:120:975', 'line:100:450'],
+};
+const parseAim = (spec: string): AimShape => {
+  const [shape, a, b] = spec.split(':');
+  const n = (v?: string) => (v ? Number(v) : 0);
+  switch (shape) {
+    case 'line': return { shape, w: n(a), reach: n(b) };
+    case 'circle': return { shape, r: n(a), reach: n(b) };
+    case 'cone': return { shape, deg: n(a), reach: n(b) };
+    case 'self': return { shape, r: n(a), reach: 0 };
+    case 'target': return { shape, reach: n(a) };
+    default: return { shape: 'none', reach: 0 };
+  }
+};
+
 // Data Dragon text carries markup ({{ spell vars }}, <tags>); strip it for plain-text UI.
 export const plain = (t: string) =>
   t
@@ -101,6 +140,7 @@ export function buildRoster(): ChampDef[] {
         execute: hint.execute,
         landRadius: hint.landRadius,
         once: hint.once,
+        aim: parseAim(AIM[r.id][i]),
       };
     });
     return {

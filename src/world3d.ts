@@ -507,6 +507,11 @@ const HEROES: Record<string, HeroCfg> = {
   darius: hero('Barbarian', ['2H_Axe'], '2H_Melee_Attack_Chop', ['2H_Melee_Attack_Spin', 'Cheer', '2H_Melee_Attack_Chop', 'Dodge_Forward'], '#b8442a'),
   ahri: hero('Mage', ['1H_Wand', 'Spellbook_open'], 'Spellcast_Shoot', ['Spellcast_Shoot', 'Spellcast_Raise', 'Spellcast_Shoot', 'Dodge_Forward'], '#ff8ac8'),
 };
+// Body proportions per champion on the shared placeholder models (Yuumi is tiny, Malphite and Blitzcrank huge).
+const CHAMP_SIZE: Record<string, number> = {
+  malphite: 1.4, blitzcrank: 1.35, garen: 1.1, darius: 1.12, rengar: 1.05, leona: 1.05, monkeyking: 0.9, masteryi: 0.95,
+  annie: 0.78, yuumi: 0.62, twitch: 0.82, jinx: 0.9, ezreal: 0.95, lux: 0.95, naafiri: 0.88, ahri: 0.95,
+};
 const MINIONS = {
   melee: { file: 'Skeleton_Minion', weapon: 'Skeleton_Blade', offhand: 'Skeleton_Shield_Small_A', attack: '1H_Melee_Attack_Chop', tint: /Cloak/ },
   caster: { file: 'Skeleton_Mage', weapon: 'Skeleton_Staff', offhand: '', attack: 'Spellcast_Shoot', tint: /Hat/ },
@@ -651,7 +656,7 @@ function makeAvatar(u: WUnit): Avatar | null {
   if (weapon) attach(weapon, 'handslot.r');
   if (offhand) attach(offhand, 'handslot.l');
 
-  const scale = unitHeight(u) / (heights.get(file) ?? 2);
+  const scale = (unitHeight(u) / (heights.get(file) ?? 2)) * (u.kind === 'champ' ? CHAMP_SIZE[u.champ!.def.id] ?? 1 : 1);
   model.scale.setScalar(scale);
   const root = new THREE.Group();
   root.add(model);
@@ -969,7 +974,7 @@ const G_CONE = new THREE.ConeGeometry(1, 1, 5);
 const G_OCT = new THREE.OctahedronGeometry(1, 0);
 const G_SPH = new THREE.SphereGeometry(1, 10, 8);
 // Every creature faces +z; parts are in world units at scale 1.
-function buildBeast(type: string, team: Side): { body: THREE.Group; mats: THREE.MeshStandardMaterial[]; scale: number } {
+function buildBeast(type: string, team: Side | 3): { body: THREE.Group; mats: THREE.MeshStandardMaterial[]; scale: number } {
   const body = new THREE.Group();
   const mats: THREE.MeshStandardMaterial[] = [];
   const M = (c: string, e = 0) => {
@@ -1100,7 +1105,7 @@ function buildBeast(type: string, team: Side): { body: THREE.Group; mats: THREE.
       break;
     }
     case 'ward': {
-      const c = team === 0 ? '#5fb4ff' : team === 1 ? '#ff6a5a' : '#ffd27a';
+      const c = team === 3 ? '#ff4fd8' : team === 0 ? '#5fb4ff' : team === 1 ? '#ff6a5a' : '#ffd27a';
       addPart(body, G_BOX, M('#6a5a40'), 0, 24, 0, 6, 48, 6);
       addPart(body, G_OCT, M(c, 2), 0, 62, 0, 14, 20, 14);
       break;
@@ -1112,7 +1117,7 @@ function syncBeast(u: WUnit, o: SyncOpts, visible: boolean) {
   let b = beasts.get(u);
   if (!b) {
     if (u.dead) return;
-    const built = buildBeast(u.kind === 'ward' ? 'ward' : u.monster ?? 'boar', u.team);
+    const built = buildBeast(u.kind === 'ward' ? 'ward' : u.monster ?? 'boar', u.kind === 'ward' && u.tier === 1 ? 3 : u.team);
     const root = new THREE.Group();
     root.add(built.body);
     scene.add(root);

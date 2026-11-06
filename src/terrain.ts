@@ -41,41 +41,48 @@ export interface CampDef {
   mobs: { type: MonsterType; dx: number; dy: number }[];
   epic?: boolean;
 }
-const WEST = {
-  toad: { x: 2900, y: 7300 },
-  buff: { x: 4100, y: 7600 },
-  birds: { x: 5300, y: 7300 },
-};
+// Camp sites are the real Summoner's Rift positions (14820-unit map), scaled to this 14000-unit map with
+// the y axis flipped (Blue's base is bottom-left here).
+const SR = MAP / 14820;
+const sr = (x: number, y: number): Vec => ({ x: x * SR, y: MAP - y * SR });
 export const CAMPS: CampDef[] = [];
 {
   let id = 0;
   const add = (name: string, p: Vec, side: 0 | 1 | 2, first: number, respawn: number, mobs: CampDef['mobs'], epic = false) =>
     CAMPS.push({ id: id++, name, x: p.x, y: p.y, side, first, respawn, mobs, epic });
+  const wolves: CampDef['mobs'] = [
+    { type: 'boarBig', dx: 0, dy: 0 },
+    { type: 'boar', dx: 120, dy: 70 },
+    { type: 'boar', dx: -100, dy: 90 },
+  ];
+  const raptors: CampDef['mobs'] = [
+    { type: 'birdBig', dx: 0, dy: 0 },
+    { type: 'bird', dx: 110, dy: -70 },
+    { type: 'bird', dx: -110, dy: -60 },
+    { type: 'bird', dx: 20, dy: 120 },
+  ];
+  const krugs: CampDef['mobs'] = [
+    { type: 'hulkBig', dx: 0, dy: 0 },
+    { type: 'hulk', dx: 130, dy: 60 },
+  ];
+  // [blue sentinel, gromp, murk wolves, raptors, red brambleback, krugs] for each team (reference coordinates)
+  const jungle: Record<0 | 1, [number, number][]> = {
+    0: [[3871, 7901], [2091, 8428], [3781, 6444], [6707, 5521], [7862, 4111], [8323, 2755]],
+    1: [[10932, 6991], [12704, 6444], [11008, 8387], [7987, 9471], [7017, 10776], [6317, 12146]],
+  };
   for (const team of [0, 1] as const) {
-    const t = (p: Vec) => (team ? mirror(p) : p);
-    add('Azure Golem', t(WEST.buff), team, 90, 300, [{ type: 'azure', dx: 0, dy: 0 }]);
-    add('Bog Toad', t(WEST.toad), team, 102, 135, [{ type: 'toad', dx: 0, dy: 0 }]);
-    add('Razorbeaks', t(WEST.birds), team, 90, 135, [
-      { type: 'birdBig', dx: 0, dy: 0 },
-      { type: 'bird', dx: 110, dy: -70 },
-      { type: 'bird', dx: -110, dy: -60 },
-      { type: 'bird', dx: 20, dy: 120 },
-    ]);
-    add('Ember Brute', t(reflect(WEST.buff)), team, 90, 300, [{ type: 'ember', dx: 0, dy: 0 }]);
-    add('Stonehulks', t(reflect(WEST.toad)), team, 102, 135, [
-      { type: 'hulkBig', dx: 0, dy: 0 },
-      { type: 'hulk', dx: 130, dy: 60 },
-    ]);
-    add('Thornback Boars', t(reflect(WEST.birds)), team, 90, 135, [
-      { type: 'boarBig', dx: 0, dy: 0 },
-      { type: 'boar', dx: 120, dy: 70 },
-      { type: 'boar', dx: -100, dy: 90 },
-    ]);
+    const j = jungle[team].map(([x, y]) => sr(x, y));
+    add('Blue Sentinel', j[0], team, 90, 300, [{ type: 'azure', dx: 0, dy: 0 }]);
+    add('Gromp', j[1], team, 102, 135, [{ type: 'toad', dx: 0, dy: 0 }]);
+    add('Murk Wolves', j[2], team, 90, 135, wolves);
+    add('Razorbeaks', j[3], team, 90, 135, raptors);
+    add('Red Brambleback', j[4], team, 90, 300, [{ type: 'ember', dx: 0, dy: 0 }]);
+    add('Krugs', j[5], team, 102, 135, krugs);
   }
-  add('River Skitter', { x: 5900, y: 5900 }, 2, 210, 150, [{ type: 'skitter', dx: 0, dy: 0 }]);
-  add('River Skitter', { x: 8100, y: 8100 }, 2, 210, 150, [{ type: 'skitter', dx: 0, dy: 0 }]);
-  add('Abyssal Colossus', { x: 4650, y: 4650 }, 2, 480, 360, [{ type: 'colossus', dx: 0, dy: 0 }], true);
-  add('Storm Drake', { x: 9350, y: 9350 }, 2, 300, 300, [{ type: 'drake', dx: 0, dy: 0 }], true);
+  add('Rift Scuttler', sr(4400, 9600), 2, 210, 150, [{ type: 'skitter', dx: 0, dy: 0 }]);
+  add('Rift Scuttler', sr(10500, 5170), 2, 210, 150, [{ type: 'skitter', dx: 0, dy: 0 }]);
+  add('Baron Nashor', sr(5007, 10471), 2, 480, 360, [{ type: 'colossus', dx: 0, dy: 0 }], true);
+  add('Dragon', sr(9866, 4414), 2, 300, 300, [{ type: 'drake', dx: 0, dy: 0 }], true);
 }
 
 // ---------- brush ----------
@@ -115,20 +122,38 @@ export const BRUSHES: { x: number; y: number; r: number }[] = [];
 }
 
 // ---------- walls ----------
+// Walkable corridors are generated: every camp connects to the nearest lane (or the river) and to its
+// nearest neighbours, so each jungle camp is reachable like the real map's paths.
 const CORRIDORS: Vec[][] = [];
 {
-  const west: [number, number][][] = [
-    [[1500, 7000], [2900, 7300], [4100, 7600], [5300, 7300], [6250, 7750]],
-    [[4100, 7600], [3900, 6000], [3700, 4000]],
-    [[2900, 7300], [2700, 5300], [2600, 3000]],
-    [[2700, 5300], [3900, 6000]],
-    [[5300, 7300], [5600, 5900]],
-    [[3700, 9800], [4000, 8700], [4100, 7600]],
-    [[4000, 8700], [5300, 7300]],
-  ];
-  for (const path of west) {
-    const pts = path.map(([x, y]) => ({ x, y }));
-    CORRIDORS.push(pts, pts.map(reflect), pts.map(mirror), pts.map((p) => mirror(reflect(p))));
+  const nearestOnPath = (p: Vec, path: Vec[]) => {
+    let best = path[0];
+    let bd = Infinity;
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i];
+      const b = path[i + 1];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      const q = { x: a.x + dx * t, y: a.y + dy * t };
+      const d = dist(p, q);
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    return { q: best, d: bd };
+  };
+  const paths = [...LANES, RIVER];
+  for (const c of CAMPS) {
+    let best: { q: Vec; d: number } | null = null;
+    for (const path of paths) {
+      const r = nearestOnPath(c, path);
+      if (!best || r.d < best.d) best = r;
+    }
+    if (best) CORRIDORS.push([{ x: c.x, y: c.y }, best.q]);
+    const others = CAMPS.filter((o) => o !== c && o.id > c.id).sort((a, b) => dist(a, c) - dist(b, c)).slice(0, 2);
+    for (const o of others) if (dist(o, c) < 3200) CORRIDORS.push([{ x: c.x, y: c.y }, { x: o.x, y: o.y }]);
   }
 }
 const inBase = (p: Vec) => (p.x <= 4400 && p.y >= 9600) || (p.x >= MAP - 4400 && p.y <= MAP - 9600);

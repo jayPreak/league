@@ -35,7 +35,7 @@ export type Cmd =
   | { c: 'cast'; s: number; x: number; y: number }
   | { c: 'flash'; x: number; y: number }
   | { c: 'heal'; id?: number } // Heal, or Smite (on a target) for junglers
-  | { c: 'ward'; x: number; y: number }
+  | { c: 'ward'; x: number; y: number; pink?: boolean } // trinket ward, or a Control Ward when pink
   | { c: 'recall' }
   | { c: 'stop' }
   | { c: 'rank'; s: number }

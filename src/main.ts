@@ -113,6 +113,7 @@ interface Champ {
   azureT: number; // jungle buffs, seconds left
   emberT: number;
   wards: number; // trinket charges
+  pinks: number; // Control Wards in the bag
   wardCd: number;
   st: Record<string, any>; // per-kit state (stacks, timers, recast data)
   rc: number[]; // recast windows per slot (seconds left)
@@ -582,6 +583,7 @@ function makeChamp(def: ChampDef, team: Team, role: Role, isPlayer: boolean): Un
     azureT: 0,
     emberT: 0,
     wards: 2,
+    pinks: 0,
     wardCd: 0,
     st: {},
     rc: [0, 0, 0, 0],
@@ -633,6 +635,7 @@ let soloRole: Role | 'fill' = 'mid';
 let soloSpell: 'auto' | 'heal' | 'smite' = 'auto'; // player's second summoner spell
 function newGame(champId: string, humans: Human[] = []) {
   NEXT_ID = 1;
+  cannonCount = 0;
   firstBlood = true;
   streak = 0;
   lastPlayerKill = -99;
@@ -865,16 +868,17 @@ let announceTimer = 0;
 type DmgFrom = 'attack' | 'spell' | 'dot';
 function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFrom = 'spell'): number {
   if (!targetable(t) || amt <= 0) return 0;
+  if (t.kind === 'ward') amt = t.maxHp > 0 ? 1 : amt; // wards lose one health per hit, like the real game
   if (t.champ) amt = KITS[t.champ.def.id]?.passive?.onTaken?.(t, src, amt, type) ?? amt;
   let res = type === 'phys' ? t.armor : type === 'magic' ? t.mr : 0;
   if (type === 'phys' && t.shredT > 0) res *= 1 - t.shredPct;
   if (type === 'phys' && src.champ) res *= 1 - (KITS[src.champ.def.id]?.passive?.armorPen?.(src, t) ?? 0);
   if (t.drT > 0) amt *= 1 - t.drPct;
   let mult = src.champ ? diffOf(src).dmg : 1;
-  // Storm Drake: each drake the team owns adds 5% damage
+  // Dragon: each drake the team owns adds 5% damage
   if (src.champ && src.team < 2) mult *= 1 + 0.05 * G.drakes[src.team as Team];
   if (src.champ && t.kind === 'monster' && src.champ.spell2 === 'smite') mult *= 1.75; // jungle companion: junglers clear faster
-  // Abyssal Colossus: empowered minions near the team's champions
+  // Baron Nashor: empowered minions near the team's champions
   if (src.kind === 'minion' && colossusOn(src.team) && G.units.some((c) => c.champ && !c.dead && c.team === src.team && dist(c, src) < 900)) mult *= 1.5;
   if (t.kind === 'minion' && colossusOn(t.team) && G.units.some((c) => c.champ && !c.dead && c.team === t.team && dist(c, t) < 900)) mult *= 0.6;
   const dmg = amt * mult * (100 / (100 + Math.max(0, res)));
@@ -1837,19 +1841,26 @@ function startRecall(u: Unit) {
 }
 
 // ================= minions & waves =================
+// Lane waves follow the real game: one minion leaves each barracks every 0.8s, a wave every 30s; a cannon
+// minion joins every third wave, then every other wave after 20:00 and every wave after 35:00; super minions
+// replace the cannon when the enemy inhibitor in that lane is down (two when all three are).
+const MINION_GAP = 0.8;
+let cannonCount = 0;
 function spawnWave() {
   G.waveNo++;
-  const types: MinionType[] = ['melee', 'melee', 'melee'];
-  if (G.waveNo % 3 === 0) types.push('siege');
-  types.push('caster', 'caster', 'caster');
+  const cap = G.t >= 35 * 60 ? 0 : G.t >= 20 * 60 ? 1 : 2;
+  const cannon = cannonCount >= cap;
+  cannonCount = cannon ? 0 : cannonCount + 1;
   const s = 1 + (G.t / 60) * 0.04;
   for (const team of [0, 1] as Team[]) {
+    const downs = [0, 1, 2].map((lane) => G.units.some((o) => o.kind === 'tower' && o.tier === T_INHIB && o.team !== team && o.lane === lane && o.dead));
     for (let lane = 0; lane < 3; lane++) {
       const poly = lanePoly(lane, team);
-      const inhibDown = G.units.some((o) => o.kind === 'tower' && o.tier === T_INHIB && o.team !== team && o.lane === lane && o.dead);
-      const laneTypes: MinionType[] = inhibDown ? ['super', ...types.filter((t) => t !== 'siege')] : types;
+      let laneTypes: MinionType[] = ['melee', 'melee', 'melee', cannon ? 'siege' : 'caster', 'caster', 'caster'];
+      if (!cannon) laneTypes = ['melee', 'melee', 'melee', 'caster', 'caster', 'caster'];
+      else laneTypes = ['melee', 'melee', 'melee', 'siege', 'caster', 'caster', 'caster'];
+      if (downs[lane]) laneTypes = downs.every(Boolean) ? ['super', 'super', 'melee', 'melee', 'melee', 'caster', 'caster', 'caster'] : ['super', 'melee', 'melee', 'melee', 'caster', 'caster', 'caster'];
       laneTypes.forEach((mt, i) => {
-        const p = pointAt(poly, Math.max(0, 300 - i * 50));
         const STATS: Record<MinionType, { hp: number; ad: number; range: number; as: number; r: number; armor: number }> = {
           melee: { hp: 480, ad: 14, range: 90, as: 1.2, r: 18, armor: 0 },
           caster: { hp: 300, ad: 24, range: 480, as: 0.7, r: 15, armor: 0 },
@@ -1857,31 +1868,37 @@ function spawnWave() {
           super: { hp: 1700, ad: 95, range: 170, as: 0.85, r: 30, armor: 30 },
         };
         const stats = STATS[mt];
-        G.units.push(
-          makeUnit({
-            kind: 'minion',
-            team,
-            x: p.x + (Math.random() - 0.5) * 30,
-            y: p.y + (Math.random() - 0.5) * 30,
-            r: stats.r,
-            hp: stats.hp * s,
-            maxHp: stats.hp * s,
-            ad: stats.ad * s,
-            range: stats.range,
-            as: stats.as,
-            armor: stats.armor,
-            ms: 325,
-            lane,
-            wp: 1,
-            mtype: mt,
-            name: 'Minion',
-            fadeIn: 0.35,
-          }),
-        );
+        K_later(i * MINION_GAP, () => {
+          const p = pointAt(poly, 300);
+          G.units.push(
+            makeUnit({
+              kind: 'minion',
+              team,
+              x: p.x + (Math.random() - 0.5) * 30,
+              y: p.y + (Math.random() - 0.5) * 30,
+              r: stats.r,
+              hp: stats.hp * s,
+              maxHp: stats.hp * s,
+              ad: stats.ad * s,
+              range: stats.range,
+              as: stats.as,
+              armor: stats.armor,
+              ms: 325,
+              lane,
+              wp: 1,
+              mtype: mt,
+              name: 'Minion',
+              fadeIn: 0.35,
+            }),
+          );
+        });
       });
     }
   }
 }
+const K_later = (secs: number, fn: () => void) => {
+  G.kfx.push({ t: Math.max(0.001, secs), fn: (_dt, left) => { if (left <= 0) fn(); } });
+};
 
 function updatePet(u: Unit, dt: number) {
   const o = u.petOwner!;
@@ -2426,18 +2443,18 @@ interface MonsterStat {
   xp: number;
 }
 const MONSTERS: Record<MonsterType, MonsterStat> = {
-  azure: { name: 'Azure Golem', hp: 2300, ad: 66, range: 160, as: 0.5, r: 62, armor: 10, mr: -15, ms: 300, gold: 100, xp: 150 },
-  ember: { name: 'Ember Brute', hp: 2300, ad: 66, range: 160, as: 0.5, r: 62, armor: -15, mr: 10, ms: 300, gold: 100, xp: 150 },
-  toad: { name: 'Bog Toad', hp: 2050, ad: 70, range: 250, as: 0.43, r: 56, armor: 0, mr: -15, ms: 300, gold: 80, xp: 125 },
-  birdBig: { name: 'Razorbeak Alpha', hp: 1200, ad: 20, range: 300, as: 0.67, r: 34, armor: 20, mr: 20, ms: 350, gold: 60, xp: 50 },
+  azure: { name: 'Blue Sentinel', hp: 2300, ad: 66, range: 160, as: 0.5, r: 62, armor: 10, mr: -15, ms: 300, gold: 100, xp: 150 },
+  ember: { name: 'Red Brambleback', hp: 2300, ad: 66, range: 160, as: 0.5, r: 62, armor: -15, mr: 10, ms: 300, gold: 100, xp: 150 },
+  toad: { name: 'Gromp', hp: 2050, ad: 70, range: 250, as: 0.43, r: 56, armor: 0, mr: -15, ms: 300, gold: 80, xp: 125 },
+  birdBig: { name: 'Crimson Raptor', hp: 1200, ad: 20, range: 300, as: 0.67, r: 34, armor: 20, mr: 20, ms: 350, gold: 60, xp: 50 },
   bird: { name: 'Razorbeak', hp: 400, ad: 13, range: 300, as: 1, r: 22, armor: 0, mr: 0, ms: 350, gold: 10, xp: 15 },
-  boarBig: { name: 'Thornback Matriarch', hp: 1600, ad: 35, range: 160, as: 0.63, r: 40, armor: 0, mr: 0, ms: 380, gold: 55, xp: 60 },
-  boar: { name: 'Thornback', hp: 420, ad: 15, range: 140, as: 0.67, r: 26, armor: 0, mr: 0, ms: 380, gold: 16, xp: 20 },
-  hulkBig: { name: 'Stonehulk', hp: 1350, ad: 70, range: 160, as: 0.5, r: 50, armor: 40, mr: -15, ms: 250, gold: 70, xp: 75 },
+  boarBig: { name: 'Greater Murk Wolf', hp: 1600, ad: 35, range: 160, as: 0.63, r: 40, armor: 0, mr: 0, ms: 380, gold: 55, xp: 60 },
+  boar: { name: 'Murk Wolf', hp: 420, ad: 15, range: 140, as: 0.67, r: 26, armor: 0, mr: 0, ms: 380, gold: 16, xp: 20 },
+  hulkBig: { name: 'Krug', hp: 1350, ad: 70, range: 160, as: 0.5, r: 50, armor: 40, mr: -15, ms: 250, gold: 70, xp: 75 },
   hulk: { name: 'Pebblehulk', hp: 1000, ad: 40, range: 140, as: 0.6, r: 36, armor: 20, mr: 0, ms: 280, gold: 40, xp: 45 },
-  skitter: { name: 'River Skitter', hp: 1050, ad: 0, range: 0, as: 0.1, r: 34, armor: 40, mr: 40, ms: 260, gold: 70, xp: 110 },
-  drake: { name: 'Storm Drake', hp: 3800, ad: 100, range: 500, as: 0.5, r: 90, armor: 21, mr: 30, ms: 330, gold: 0, xp: 0 },
-  colossus: { name: 'Abyssal Colossus', hp: 9000, ad: 150, range: 250, as: 0.75, r: 110, armor: 120, mr: 70, ms: 350, gold: 0, xp: 0 },
+  skitter: { name: 'Rift Scuttler', hp: 1050, ad: 0, range: 0, as: 0.1, r: 34, armor: 40, mr: 40, ms: 260, gold: 70, xp: 110 },
+  drake: { name: 'Dragon', hp: 3800, ad: 100, range: 500, as: 0.5, r: 90, armor: 21, mr: 30, ms: 330, gold: 0, xp: 0 },
+  colossus: { name: 'Baron Nashor', hp: 9000, ad: 150, range: 250, as: 0.75, r: 110, armor: 120, mr: 70, ms: 350, gold: 0, xp: 0 },
 };
 const colossusOn = (team: Side) => team < 2 && !!G && G.colossus[team as Team] > G.t;
 const smiteDamage = (u: Unit) => 450 + 25 * u.champ!.level;
@@ -2553,18 +2570,18 @@ function monsterKilled(t: Unit, killer: Unit | null) {
   const mine = team === G.player.team;
   if (t.monster === 'azure') {
     killer.champ.azureT = 120;
-    feedMsg(`${killer.name} took the Azure Golem's blessing`, team);
+    feedMsg(`${killer.name} took the Blue Sentinel's Crest of Insight`, team);
   } else if (t.monster === 'ember') {
     killer.champ.emberT = 120;
-    feedMsg(`${killer.name} took the Ember Brute's blessing`, team);
+    feedMsg(`${killer.name} took the Red Brambleback's Crest of Cinders`, team);
   } else if (t.monster === 'drake') {
     G.drakes[team]++;
     for (const c of G.units) if (c.champ && c.team === team) giveGold(c, 100), gainXp(c, 200);
-    announce(mine ? 'Your team has slain the Storm Drake' : 'The enemy has slain the Storm Drake', mine ? 'good' : 'bad', `+5% damage (${G.drakes[team]} stack${G.drakes[team] > 1 ? 's' : ''})`);
+    announce(mine ? 'Your team has slain the Dragon' : 'The enemy has slain the Dragon', mine ? 'good' : 'bad', `+5% damage (${G.drakes[team]} stack${G.drakes[team] > 1 ? 's' : ''})`);
   } else if (t.monster === 'colossus') {
     G.colossus[team] = G.t + 180;
     for (const c of G.units) if (c.champ && c.team === team) giveGold(c, 300), gainXp(c, 400);
-    announce(mine ? 'Your team has slain the Abyssal Colossus' : 'The enemy has slain the Abyssal Colossus', mine ? 'good' : 'bad', 'Empowered minions and fast recall for 3 minutes');
+    announce(mine ? 'Your team has slain Baron Nashor' : 'The enemy has slain Baron Nashor', mine ? 'good' : 'bad', 'Empowered minions and fast recall for 3 minutes');
   }
 }
 
@@ -2632,7 +2649,7 @@ function computeVision() {
         if (Math.abs(o.x - e.x) > r || Math.abs(o.y - e.y) > r || dist(o, e) > r) continue;
         // brush hides you from anyone not standing in it (turrets see in)
         if (eb >= 0 && o.kind !== 'tower' && brushOf(o.x, o.y) !== eb && dist(o, e) > 160) continue;
-        if (!lineClear(o, e, 80)) continue;
+        if (!lineClear(o, e, 40)) continue;
         seen.add(e);
         break;
       }
@@ -2644,23 +2661,26 @@ const isSeen = (team: Side, e: Unit) => team === 2 || e.team === team || !G.seen
 const fogged = (e: Unit) => !isSeen(G.player.team, e);
 
 // ---------- trinket ward ----------
-function placeWard(u: Unit, x: number, y: number): boolean {
+function placeWard(u: Unit, x: number, y: number, pink = false): boolean {
   const c = u.champ!;
-  if (u.dead || c.wards <= 0) return false;
+  if (u.dead || (pink ? c.pinks <= 0 : c.wards <= 0)) return false;
   const d = Math.hypot(x - u.x, y - u.y) || 1;
   const reach = Math.min(d, 600);
   const p = { x: u.x + ((x - u.x) / d) * reach, y: u.y + ((y - u.y) / d) * reach };
   pushOut(p);
   // one ward per champion: the oldest goes
-  const mine = G.units.filter((w) => w.kind === 'ward' && w.target === u && !w.dead);
-  if (mine.length >= 2) mine[0].dead = true;
-  const w = makeUnit({ kind: 'ward', team: u.team, x: p.x, y: p.y, r: 14, hp: 3, maxHp: 3, name: 'Ward', fadeIn: 0.3 });
-  w.life = 90;
-  w.stealthT = 1;
+  const mine = G.units.filter((w) => w.kind === 'ward' && w.target === u && !w.dead && (w.tier === 1) === pink);
+  if (mine.length >= (pink ? 1 : 2)) mine[0].dead = true;
+  const w = makeUnit({ kind: 'ward', team: u.team, x: p.x, y: p.y, r: 14, hp: pink ? 4 : 3, maxHp: pink ? 4 : 3, name: pink ? 'Control Ward' : 'Ward', fadeIn: 0.3, tier: pink ? 1 : 0 });
+  w.life = pink ? 1e9 : 90; // Control Wards never expire
+  w.stealthT = pink ? 0 : 1;
   w.target = u; // owner
   G.units.push(w);
-  c.wards--;
-  if (c.wardCd <= 0) c.wardCd = 120;
+  if (pink) c.pinks--;
+  else {
+    c.wards--;
+    if (c.wardCd <= 0) c.wardCd = 120;
+  }
   if (u === G.player) sfx('click');
   return true;
 }
@@ -2781,7 +2801,8 @@ function update(dt: number) {
     else if (u.kind === 'minion') updateMinion(u, dt);
     else if (u.kind === 'monster') updateMonster(u, dt);
     else if (u.kind === 'ward') {
-      u.stealthT = 1; // wards stay hidden from the enemy
+      // stealth wards hide from the enemy until an enemy Control Ward is within 900; Control Wards are always visible
+      u.stealthT = u.tier === 1 || G.units.some((o) => o.kind === 'ward' && o.tier === 1 && !o.dead && o.team !== u.team && dist(o, u) <= 900) ? 0 : 1;
       if ((u.life -= dt) <= 0) u.dead = true;
     }
     if (u.pathT > 0) u.pathT -= dt;
@@ -3326,14 +3347,14 @@ function fogCanvas(w: number, h: number) {
 }
 // Darkens what your team can't see. Drawn at quarter resolution with soft edges; ground maps to
 // the screen affinely, so each sight circle is an ellipse squashed by K.
-const SIGHT_RAYS = 96;
+const SIGHT_RAYS = 144;
 const sightCache = new Map<Unit, { x: number; y: number; r: number; poly: Vec[] }>();
 // Points where rays from u stop: at its sight radius or the first jungle wall (towers see over walls).
 function sightPoly(u: Unit, r: number): Vec[] {
   const hit = sightCache.get(u);
   if (hit && Math.abs(hit.x - u.x) < 8 && Math.abs(hit.y - u.y) < 8 && hit.r === r) return hit.poly;
   const poly: Vec[] = [];
-  const step = 40;
+  const step = 25;
   for (let i = 0; i < SIGHT_RAYS; i++) {
     const a = (i / SIGHT_RAYS) * Math.PI * 2;
     const dx = Math.cos(a);
@@ -3412,7 +3433,7 @@ function drawMinimap() {
     const y = u.y * s;
     mctx.fillStyle = TEAM_COLOR[u.team];
     if (u.kind === 'ward') {
-      mctx.fillStyle = '#ffe27a';
+      mctx.fillStyle = u.tier === 1 ? '#ff4fd8' : '#ffe27a';
       mctx.fillRect(x - 2, y - 2, 4, 4);
     } else if (u.kind === 'monster') {
       const big = u.r > 45;
@@ -3626,7 +3647,7 @@ function renderShop() {
     : 'You can only buy items while in your fountain (press B to recall).';
   const html = ITEMS.map(
     (it) =>
-      `<button class="item" data-id="${it.id}" ${!ok || c.gold < it.cost || c.items.length >= 6 || (it.unique && c.items.includes(it.id)) ? 'disabled' : ''}><span class="cost">${it.cost}</span><b>${it.name}</b><small>${it.desc}</small></button>`,
+      `<button class="item" data-id="${it.id}" ${!ok || c.gold < it.cost || (it.consumable ? c.pinks >= 2 : c.items.length >= 6) || (it.unique && c.items.includes(it.id)) ? 'disabled' : ''}><span class="cost">${it.cost}</span><b>${it.name}</b><small>${it.desc}</small></button>`,
   ).join('');
   if (hudCache.get('shop') !== html + note) {
     hudCache.set('shop', html + note);
@@ -3648,12 +3669,17 @@ function canBuy(u: Unit, id: string): boolean {
   const it = ITEM_MAP[id];
   const c = u.champ!;
   const inShop = u.dead || dist(u, BASES[u.team]) < FOUNTAIN_R + 60;
+  if (it?.consumable) return inShop && c.gold >= it.cost && c.pinks < 2;
   return !!it && inShop && c.gold >= it.cost && c.items.length < 6 && !(it.unique && c.items.includes(it.id));
 }
 function buyItem(u: Unit, id: string) {
   if (!canBuy(u, id)) return;
   const c = u.champ!;
   c.gold -= ITEM_MAP[id].cost;
+  if (ITEM_MAP[id].consumable) {
+    c.pinks++;
+    return;
+  }
   c.items.push(id);
   recalc(u);
 }
@@ -3771,6 +3797,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'd') command({ c: 'flash', x: w.x, y: w.y });
   else if (k === 'f') command({ c: 'heal', id: hoverUnit(30)?.id });
   else if (k === '4') command({ c: 'ward', x: w.x, y: w.y });
+  else if (k === '5') command({ c: 'ward', x: w.x, y: w.y, pink: true });
   else if (k === 'b') command({ c: 'recall' });
   else if (k === 's') command({ c: 'stop' });
 });
@@ -3843,6 +3870,7 @@ function aimReach(slot: number): number {
   const P = G.player;
   if (slot === 4) return 425;
   const a = P.champ!.def.abilities[slot];
+  if (a.aim) return a.aim.shape === 'self' || a.aim.shape === 'none' ? 0 : a.aim.reach;
   if (a.kind === 'beam') return 1300;
   if (a.kind === 'bolt') return Math.min(a.range, 1300);
   if (a.kind === 'nova') return a.selfCenter ? 0 : a.range;
@@ -3954,7 +3982,7 @@ function drawAim(ctx: CanvasRenderingContext2D) {
     const m = toWorld(mouse.x, mouse.y);
     const reach = aimReach(slot);
     const d = Math.hypot(m.x - P.x, m.y - P.y) || 1;
-    const nova = P.champ!.def.abilities[slot].kind === 'nova';
+    const nova = P.champ!.def.abilities[slot].kind === 'nova' || P.champ!.def.abilities[slot].aim?.shape === 'circle';
     const k = nova ? Math.min(1, reach / d) : reach / d;
     t = { x: P.x + (m.x - P.x) * k, y: P.y + (m.y - P.y) * k };
   } else if (aim && aim.aiming) {
@@ -3963,6 +3991,8 @@ function drawAim(ctx: CanvasRenderingContext2D) {
     if (aim.cancel) col = '#ff4d4d';
   } else return;
   const def = slot < 4 ? P.champ!.def.abilities[slot] : null;
+  const shape = def?.aim;
+  if (shape) return drawAimShape(ctx, shape, t, col, slot);
   ctx.globalAlpha = 0.35;
   ctx.strokeStyle = col;
   ctx.lineWidth = 7;
@@ -3985,6 +4015,104 @@ function drawAim(ctx: CanvasRenderingContext2D) {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+}
+// League-style indicators: thin white range ring, a translucent skillshot rectangle / ground circle /
+// cone / self radius, and a highlight on the unit a targeted spell would pick.
+function drawAimShape(ctx: CanvasRenderingContext2D, a: import('./data').AimShape, t: Vec, col: string, slot: number) {
+  const P = G.player;
+  const dx = t.x - P.x;
+  const dy = t.y - P.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ang = Math.atan2(dy, dx);
+  const fill = col === '#ffffff' ? 'rgba(180,225,255,0.22)' : 'rgba(255,77,77,0.25)';
+  const edge = col === '#ffffff' ? 'rgba(235,248,255,0.85)' : 'rgba(255,90,90,0.9)';
+  ctx.save();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = edge;
+  ctx.fillStyle = fill;
+  const ring = (r: number) => {
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath();
+    ctx.arc(P.x, P.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  switch (a.shape) {
+    case 'line': {
+      ctx.translate(P.x, P.y);
+      ctx.rotate(ang);
+      const w = a.w ?? 80;
+      ctx.beginPath();
+      ctx.rect(0, -w / 2, a.reach, w);
+      ctx.fill();
+      ctx.stroke();
+      // arrow head so the direction reads at a glance
+      ctx.beginPath();
+      ctx.moveTo(a.reach, -w * 0.9);
+      ctx.lineTo(a.reach + w * 0.9, 0);
+      ctx.lineTo(a.reach, w * 0.9);
+      ctx.closePath();
+      ctx.fillStyle = edge;
+      ctx.globalAlpha = 0.5;
+      ctx.fill();
+      break;
+    }
+    case 'circle': {
+      ring(a.reach);
+      const k = Math.min(1, a.reach / len);
+      const cx = P.x + dx * k;
+      const cy = P.y + dy * k;
+      ctx.beginPath();
+      ctx.arc(cx, cy, a.r ?? 200, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 'cone': {
+      const half = (((a.deg ?? 50) / 2) * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.moveTo(P.x, P.y);
+      ctx.arc(P.x, P.y, a.reach, ang - half, ang + half);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 'self': {
+      ctx.beginPath();
+      ctx.arc(P.x, P.y, a.r ?? 300, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 'target': {
+      ring(a.reach);
+      // the unit under (or nearest) the cursor, if the spell could reach it
+      let best: Unit | null = null;
+      let bd = 220;
+      for (const e of G.units) {
+        if (e.dead || e.team === P.team || !targetable(e) || fogged(e) || dist(e, P) > a.reach + e.r) continue;
+        if (e.kind !== 'champ' && e.kind !== 'minion' && e.kind !== 'monster') continue;
+        const d = Math.hypot(e.x - t.x, e.y - t.y) - e.r;
+        if (d < bd) {
+          bd = d;
+          best = e;
+        }
+      }
+      if (best) {
+        ctx.strokeStyle = '#ff5a5a';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(best.x, best.y, best.r + 18, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  ctx.restore();
+  void slot;
 }
 
 function layoutTouch() {
@@ -4215,7 +4343,8 @@ $('mrecall').addEventListener('click', () => running && command({ c: 'recall' })
 $('mward').addEventListener('click', () => {
   if (!running) return;
   const P = G.player;
-  command({ c: 'ward', x: P.x + facing.x * 400, y: P.y + facing.y * 400 });
+  const pink = P.champ!.wards <= 0 && P.champ!.pinks > 0; // out of trinket charges: drop a Control Ward
+  command({ c: 'ward', x: P.x + facing.x * 400, y: P.y + facing.y * 400, pink });
 });
 window.addEventListener('resize', () => TOUCH && G && layoutTouch());
 
@@ -4268,7 +4397,7 @@ function applyCmd(u: Unit, cmd: Cmd) {
       else castHeal(u);
       break;
     case 'ward':
-      placeWard(u, cmd.x, cmd.y);
+      if (!placeWard(u, cmd.x, cmd.y, !!cmd.pink)) addText(u.x, u.y - 60, cmd.pink ? 'No Control Ward' : 'Ward on cooldown', '#aaa', 14);
       break;
     case 'recall':
       startRecall(u);
@@ -5390,7 +5519,7 @@ function tick(now: number, draw: boolean) {
     if (draw) render();
     return;
   }
-  let left = Math.min(net.role === 'host' && running ? 1 : 0.05, elapsed);
+  let left = Math.min(net.role === 'host' && running ? 1 : 0.5, elapsed); // catch up after slow frames: never run in slow motion
   do {
     const dt = Math.min(0.05, left);
     simStep(dt);
@@ -5434,5 +5563,5 @@ Object.assign(window, {
 
 // dev-only handle for smoke-testing champion kits from the console
 if (import.meta.env.DEV) {
-  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp };
+  (window as any).__rift = { get G() { return G; }, newGame, update, cast, recalc, CHAMPS, KITS, costOf, encodeSnap, applySnap, applyCmd, rankUp, makeChamp, isWall, placeWard, CAMPS };
 }

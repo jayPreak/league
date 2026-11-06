@@ -57,6 +57,16 @@ export interface AbilityDef {
   costs?: number[]; // resource cost per rank
   ranges?: number[]; // cast range per rank
   costType?: string; // 'Mana', 'Energy', 'No Cost', 'Generates 1 Ferocity', ...
+  aim?: AimShape; // what the hold-to-aim indicator draws
+}
+// line: skillshot rectangle (w wide, reach long); circle: ground target of radius r within reach;
+// cone: wedge of `deg` degrees; self: ring of radius r around the caster; target: a unit within reach; none: nothing
+export interface AimShape {
+  shape: 'line' | 'circle' | 'cone' | 'self' | 'target' | 'none';
+  reach: number;
+  w?: number;
+  r?: number;
+  deg?: number;
 }
 
 export interface ChampDef {
@@ -108,6 +118,7 @@ export interface ItemDef {
   haste?: number;
   ls?: number;
   unique?: boolean;
+  consumable?: boolean; // bought into a counter instead of an inventory slot
 }
 
 // ---------- map ----------
@@ -149,6 +160,7 @@ export const CHAMPS: ChampDef[] = buildRoster();
 
 // ---------- items ----------
 export const ITEMS: ItemDef[] = [
+  { id: 'pink', name: 'Control Ward', cost: 75, desc: 'Press 5: a visible ward that never expires and reveals hidden wards. Hold 1.', consumable: true },
   { id: 'sword', name: 'Iron Blade', cost: 350, desc: '+10 AD', ad: 10 },
   { id: 'tome', name: 'Spell Tome', cost: 435, desc: '+20 AP', ap: 20 },
   { id: 'gem', name: 'Heart Gem', cost: 400, desc: '+150 HP', hp: 150 },
