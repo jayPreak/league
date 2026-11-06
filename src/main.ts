@@ -630,6 +630,7 @@ function botPick(role: Role, taken: Set<string>): ChampDef {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 let soloRole: Role | 'fill' = 'mid';
+let soloSpell: 'auto' | 'heal' | 'smite' = 'auto'; // player's second summoner spell
 function newGame(champId: string, humans: Human[] = []) {
   NEXT_ID = 1;
   firstBlood = true;
@@ -723,6 +724,7 @@ function newGame(champId: string, humans: Human[] = []) {
         taken.add(def.id);
         const u = makeChamp(def, team, role, true);
         if (h.name) u.name = h.name;
+        if (h.peer === 'host' && soloSpell !== 'auto') u.champ!.spell2 = soloSpell;
         if (h.peer === 'host') slots.push(u);
         else remote.set(h.peer, u);
         units.push(u);
@@ -3324,6 +3326,30 @@ function fogCanvas(w: number, h: number) {
 }
 // Darkens what your team can't see. Drawn at quarter resolution with soft edges; ground maps to
 // the screen affinely, so each sight circle is an ellipse squashed by K.
+const SIGHT_RAYS = 96;
+const sightCache = new Map<Unit, { x: number; y: number; r: number; poly: Vec[] }>();
+// Points where rays from u stop: at its sight radius or the first jungle wall (towers see over walls).
+function sightPoly(u: Unit, r: number): Vec[] {
+  const hit = sightCache.get(u);
+  if (hit && Math.abs(hit.x - u.x) < 8 && Math.abs(hit.y - u.y) < 8 && hit.r === r) return hit.poly;
+  const poly: Vec[] = [];
+  const step = 40;
+  for (let i = 0; i < SIGHT_RAYS; i++) {
+    const a = (i / SIGHT_RAYS) * Math.PI * 2;
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    let d = step;
+    if (u.kind !== 'tower' && u.kind !== 'nexus') {
+      for (; d < r; d += step) if (isWall(u.x + dx * d, u.y + dy * d)) break;
+      if (d < r) d += 30; // let the wall's face show
+    }
+    d = Math.min(d, r);
+    poly.push({ x: u.x + dx * d, y: u.y + dy * d });
+  }
+  sightCache.set(u, { x: u.x, y: u.y, r, poly });
+  if (sightCache.size > 400) sightCache.clear();
+  return poly;
+}
 function drawFog(z: number) {
   const q = 4;
   const fw = Math.ceil(W / q);
@@ -3340,17 +3366,20 @@ function drawFog(z: number) {
     if (o.dead || o.team !== G.player.team || o.kind === 'monster' || (o.kind === 'tower' && o.tier === T_INHIB)) continue;
     const r = SIGHT[o.kind];
     if (Math.abs(o.x - rcx) > halfW + r || Math.abs(o.y - rcy) > H / (z * K) + r) continue;
+    // sight stops at jungle walls: cast rays and cut the circle down to what's in line of sight
     const sp = screenOf(o.x, o.y, 0);
     const rx = (r * z) / q;
     const g = f.createRadialGradient(0, 0, rx * 0.8, 0, 0, rx);
     g.addColorStop(0, 'rgba(0,0,0,1)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
+    const poly = sightPoly(o, r);
     f.save();
     f.translate(sp.x / q, sp.y / q);
     f.scale(1, K);
     f.fillStyle = g;
     f.beginPath();
-    f.arc(0, 0, rx, 0, Math.PI * 2);
+    poly.forEach((p, i) => (i ? f.lineTo(((p.x - o.x) * z) / q, ((p.y - o.y) * z) / q) : f.moveTo(((p.x - o.x) * z) / q, ((p.y - o.y) * z) / q)));
+    f.closePath();
     f.fill();
     f.restore();
   }
@@ -3468,6 +3497,12 @@ function buildHud() {
     ab.appendChild(el);
     slotEls.push({ root: el, cd: el.querySelector('.cd')!, cdt: el.querySelector('.cdt')!, pips: el.querySelector<HTMLElement>('.pips') });
   });
+  const wd = document.createElement('div');
+  wd.className = 'slot spell';
+  wd.id = 'wardslot';
+  wd.title = 'Trinket ward (4) — place a hidden ward at the cursor that reveals the area for 90s. 2 charges, 120s recharge.';
+  wd.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, #ffe27a, #111 85%)">Ward</div><div class="cd"></div><div class="cdt"></div><span class="key">4</span>`;
+  ab.appendChild(wd);
   paintPortrait();
   buildTouch();
   lastGold = c.gold;
@@ -3517,6 +3552,12 @@ function updateHud() {
   setText($('shopgold'), 'sgold', `${gold} gold`);
   const all = [...c.cds, ...c.spellCds];
   const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), 180, 150];
+  const ws = document.getElementById('wardslot');
+  if (ws) {
+    const cc = G.player.champ!;
+    setText(ws.querySelector<HTMLElement>('.cdt')!, 'wardcdt', cc.wards > 0 ? `${cc.wards}` : `${Math.ceil(cc.wardCd)}`);
+    ws.classList.toggle('down', cc.wards <= 0);
+  }
   slotEls.forEach((s, i) => {
     const v = all[i];
     readyFlash(s.root, 'slot' + i, v);
@@ -3717,7 +3758,8 @@ window.addEventListener('keydown', (e) => {
   }
   if (P.dead) return;
   if (slot >= 0) {
-    if (castReady(P, slot)) command({ c: 'cast', s: slot, x: w.x, y: w.y });
+    if (e.repeat) return;
+    if (castReady(P, slot)) kbAim = slot; // hold to show range, release to cast
     else {
       sfx('nope');
       const a = c.def.abilities[slot];
@@ -3732,6 +3774,20 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'b') command({ c: 'recall' });
   else if (k === 's') command({ c: 'stop' });
 });
+
+// Hold Q/W/E/R to preview range and area; release to cast at the cursor. Right-click cancels.
+let kbAim: number | null = null;
+window.addEventListener('keyup', (e) => {
+  if (kbAim === null) return;
+  const slot = ['q', 'w', 'e', 'r'].indexOf(e.key.toLowerCase());
+  if (slot !== kbAim) return;
+  kbAim = null;
+  if (!running || G.over !== null || G.player.dead || !castReady(G.player, slot)) return;
+  const w = toWorld(mouse.x, mouse.y);
+  command({ c: 'cast', s: slot, x: w.x, y: w.y });
+});
+window.addEventListener('contextmenu', () => (kbAim = null));
+window.addEventListener('blur', () => (kbAim = null));
 
 function edgePan(dt: number) {
   if (G.camLocked || TOUCH) return;
@@ -3889,16 +3945,29 @@ function touchTick(dt: number) {
 }
 
 function drawAim(ctx: CanvasRenderingContext2D) {
-  if (!aim || !aim.aiming) return;
   const P = G.player;
-  const t = aimTarget(aim);
-  const col = aim.cancel ? '#ff4d4d' : '#ffffff';
-  const def = aim.slot < 4 ? P.champ!.def.abilities[aim.slot] : null;
+  let slot: number;
+  let t: Vec;
+  let col = '#ffffff';
+  if (kbAim !== null && !P.dead) {
+    slot = kbAim;
+    const m = toWorld(mouse.x, mouse.y);
+    const reach = aimReach(slot);
+    const d = Math.hypot(m.x - P.x, m.y - P.y) || 1;
+    const nova = P.champ!.def.abilities[slot].kind === 'nova';
+    const k = nova ? Math.min(1, reach / d) : reach / d;
+    t = { x: P.x + (m.x - P.x) * k, y: P.y + (m.y - P.y) * k };
+  } else if (aim && aim.aiming) {
+    slot = aim.slot;
+    t = aimTarget(aim);
+    if (aim.cancel) col = '#ff4d4d';
+  } else return;
+  const def = slot < 4 ? P.champ!.def.abilities[slot] : null;
   ctx.globalAlpha = 0.35;
   ctx.strokeStyle = col;
   ctx.lineWidth = 7;
   ctx.beginPath();
-  ctx.arc(P.x, P.y, aimReach(aim.slot), 0, Math.PI * 2);
+  ctx.arc(P.x, P.y, aimReach(slot), 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 0.45;
   if (def && def.kind === 'nova') {
@@ -5119,6 +5188,29 @@ function champDetail(id: string) {
       .map((a, i) => `<li><b>${'QWER'[i]}</b><div><strong>${a.name}</strong> <em>${a.cds ? a.cds.join('/') : a.cd}s${abilityCostText(c, a)}</em><p>${a.desc}</p></div></li>`)
       .join('')}</ul>`;
 }
+function buildSums() {
+  const el = $('sums');
+  try {
+    const saved = localStorage.getItem('rift-spell');
+    if (saved === 'heal' || saved === 'smite' || saved === 'auto') soloSpell = saved;
+  } catch {
+    // storage unavailable
+  }
+  const opts: [typeof soloSpell, string][] = [['auto', 'Auto (Smite if jungle)'], ['smite', 'Smite'], ['heal', 'Heal']];
+  el.innerHTML = `<span>Summoner (F)</span>` + opts.map(([v, l]) => `<button data-s="${v}" class="${v === soloSpell ? 'on' : ''}">${l}</button>`).join('');
+  el.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+    if (!b) return;
+    soloSpell = b.dataset.s as typeof soloSpell;
+    el.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    try {
+      localStorage.setItem('rift-spell', soloSpell);
+    } catch {
+      // storage unavailable
+    }
+    sfx('click');
+  });
+}
 function buildRoles() {
   const el = $('roles');
   const opts: (Role | 'fill')[] = ['top', 'jungle', 'mid', 'adc', 'support', 'fill'];
@@ -5146,6 +5238,7 @@ function buildRoles() {
 }
 function buildMenu() {
   buildRoles();
+  buildSums();
   const wrap = $('champs');
   const tabs = $('ctabs');
   tabs.innerHTML = CLASSES.map((k) => `<button data-k="${k}" class="${k === champFilter ? 'on' : ''}">${k}</button>`).join('');

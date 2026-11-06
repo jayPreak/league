@@ -141,7 +141,7 @@ export const TURRET_AT = { side: [8900, 5900, 3000], mid: [5300, 4000, 2700] }; 
 export const INHIB_AT = 2050;
 
 export const WAVE_INTERVAL = 30;
-export const FIRST_WAVE = 65; // first wave leaves the nexus at 1:05
+export const FIRST_WAVE = 20; // first wave leaves the nexus at 0:20
 
 // ---------- champions ----------
 // Built from the reference database in src/champions (see scripts/build-champions.mjs).

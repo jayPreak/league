@@ -1927,7 +1927,8 @@ body.touch #mp input {
 }
 
 /* position picker */
-#roles {
+#roles,
+#sums {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -1938,7 +1939,8 @@ body.touch #mp input {
   text-transform: uppercase;
   color: #a99a7a;
 }
-#roles button {
+#roles button,
+#sums button {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(200, 170, 110, 0.25);
   color: #cdbf9f;
@@ -1948,7 +1950,8 @@ body.touch #mp input {
   letter-spacing: 0.04em;
   text-transform: none;
 }
-#roles button.on {
+#roles button.on,
+#sums button.on {
   border-color: #e8c46a;
   color: #fff3d6;
   background: rgba(200, 170, 110, 0.16);
