@@ -187,3 +187,10 @@ writeFileSync('src/runes.json', JSON.stringify(runes.map((t) => ({ id: t.id, key
 const ricons = runes.flatMap((t) => [t.icon, ...t.slots.flatMap((s) => s.runes.map((r) => r.icon))]);
 await pool(ricons, 8, (p) => { mkdirSync('public/img/rune/' + p.split('/').slice(0, -1).join('/'), { recursive: true }); return dl(`https://ddragon.leagueoflegends.com/cdn/img/${p}`, 'public/img/rune/' + p); });
 console.log('runes', runes.length);
+
+// ---------- summoner spell icons (numbers live in src/summoners.ts) ----------
+const summ = await get(dd('data/en_US/summoner.json'));
+mkdirSync('public/img/spell', { recursive: true });
+const sids = Object.values(summ.data).filter((s) => s.modes.includes('CLASSIC')).map((s) => s.image.full);
+await pool(sids, 8, (f) => dl(dd(`img/spell/${f}`), `public/img/spell/${f}`));
+console.log('summoner spells', sids.length);

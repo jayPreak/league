@@ -64,6 +64,27 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
   Tested in WebKit 18 (Playwright) emulating an iPhone 14, not on a physical device.
 
 
+## Summoner spells (D/F)
+
+- All nine Summoner's Rift spells (`src/summoners.ts`): Flash, Ignite, Exhaust, Teleport, Ghost, Barrier, Cleanse, Heal, Smite.
+  Cooldowns, ranges and icons from Data Dragon `summoner.json` (16.22.1); effect numbers from the League wiki pages
+  (Data Dragon only ships `{{ placeholders }}` for them): Flash 400 units / 300s; Ignite 70-525 true over 5s + 40% Grievous
+  Wounds + reveal / 600 range / 180s; Exhaust 40% slow + 35% less damage dealt for 3s / 650 / 240s; Ghost 24-50.82% MS and
+  no unit collision for 10s / 240s; Barrier 100-502.35 shield for 2.5s / 180s; Cleanse removes disables (not airborne) and
+  Ignite/Exhaust, 75% tenacity for 3s / 240s; Heal 80-346 on self + one ally (cursor, else most wounded in 900), 30% MS for
+  1s, halved within 35s of a previous Heal / 240s; Teleport 3s channel then untargetable travel to an allied turret, minion
+  or ward, Unleashed at 10:00 (330-240s cooldown, 50% MS for 3s) / 300s; Smite 600 true, 2 charges, 90s recharge, starts
+  with 1 and the second starts recharging at 0:48, 15s between casts.
+- **Approximated**: "a - b (based on level)" values are interpolated linearly from level 1 to 18 (Riot's curves are not
+  published). Teleport travel time is `0.5-5s` (Unleashed `0.5-4s`) scaled linearly by distance / map size. Teleport is
+  interrupted by stun, airborne, charm or silence, and by the player moving/attacking/casting (no partial cooldown refund).
+  Tenacity shortens stun/root/slow/silence/charm applied after Cleanse. Exhaust's damage reduction applies to physical and
+  magic damage only. Smite's Unleashed/Primal upgrades (jungle pet treats) are not modelled; the jungle-companion damage
+  bonus and monster damage reduction stay as before. Summoner spell haste does not exist.
+- Champion select and the main menu have a D/F picker (swaps when you pick the spell in the other slot). Role binding:
+  junglers always carry Smite and nobody else may. Bots take Flash plus a role spell: jungle Smite, bottom Heal,
+  top Teleport, mid Teleport (Ignite for assassins), support Exhaust for enchanters/mages, Ignite otherwise.
+
 ## Full-game test (every champion)
 
 `scripts/full-game-test.mjs` (needs `npm run dev` on :5173, puppeteer-core and Chrome) plays one complete 5v5 bot match per

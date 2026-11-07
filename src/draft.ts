@@ -3,13 +3,15 @@
 import type { ChampDef } from './data';
 import { TREES, runeIcon, savePage, loadPage, isSimulated, SHARDS } from './runes';
 import type { RunePage, Tree } from './runes';
+import { defaultSums, fixSums, mountSumPicker } from './summoners';
+import type { SumPair } from './summoners';
 
 export type DRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support';
 export const D_ROLES: DRole[] = ['top', 'jungle', 'mid', 'adc', 'support'];
 const ROLE_NAME: Record<DRole, string> = { top: 'Top', jungle: 'Jungle', mid: 'Mid', adc: 'Bottom', support: 'Support' };
 const ROLE_TAGS: Record<DRole, string[]> = { top: ['Fighter', 'Tank'], jungle: ['Assassin', 'Fighter', 'Tank'], mid: ['Mage', 'Assassin'], adc: ['Marksman'], support: ['Support', 'Tank', 'Mage'] };
 const FAMOUS = ['yasuo', 'zed', 'jinx', 'lux', 'ahri', 'thresh', 'leesin', 'ezreal', 'vayne', 'katarina', 'darius', 'garen', 'yone', 'akali', 'caitlyn', 'kaisa', 'jhin', 'sylas', 'kayn', 'viego', 'masteryi', 'twitch', 'irelia', 'rengar', 'yuumi', 'blitzcrank', 'morgana', 'leona'];
-export interface DraftResult { blue: string[]; red: string[]; bans: string[]; role: DRole; spell: 'auto' | 'heal' | 'smite'; pick: string }
+export interface DraftResult { blue: string[]; red: string[]; bans: string[]; role: DRole; sums: SumPair; pick: string }
 interface Turn { team: 0 | 1; kind: 'ban' | 'pick'; slot: number }
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -17,7 +19,7 @@ const shuffle = <T,>(a: T[]) => { const r = [...a]; for (let i = r.length - 1; i
 const img = (c: ChampDef) => `<img src="${import.meta.env.BASE_URL}img/champ/${c.key ?? c.name}.png" alt="${c.name}" draggable="false" loading="lazy">`;
 
 export function openDraft(opts: {
-  champs: ChampDef[]; role: DRole | 'fill'; spell: 'auto' | 'heal' | 'smite'; onDone: (r: DraftResult) => void; onCancel: () => void; sfx: (n: string) => void;
+  champs: ChampDef[]; role: DRole | 'fill'; sums: SumPair | null; onDone: (r: DraftResult) => void; onCancel: () => void; sfx: (n: string) => void;
 }) {
   const { champs } = opts;
   const byId = new Map(champs.map((c) => [c.id, c]));
@@ -34,7 +36,6 @@ export function openDraft(opts: {
   const bans: (string | null)[] = Array(10).fill(null);
   const picks: (string | null)[][] = [Array(5).fill(null), Array(5).fill(null)]; // indexed by D_ROLES position
   const hover: (string | null)[] = [null, null];
-  let spell = opts.spell;
   let turn = 0;
   let timer = 0;
   let timerId = 0;
@@ -71,7 +72,18 @@ export function openDraft(opts: {
     <div id="drunepanel" class="hidden"></div>`;
   const tabs = ['All', 'Fighter', 'Tank', 'Mage', 'Assassin', 'Marksman', 'Support'];
   $('dtabs').innerHTML = tabs.map((k) => `<button data-k="${k}" class="${k === filter ? 'on' : ''}">${k}</button>`).join('');
-  $('dspells').innerHTML = `<span>Spell</span>` + (['auto', 'smite', 'heal'] as const).map((v) => `<button data-s="${v}" class="${v === spell ? 'on' : ''}">${v === 'auto' ? 'Auto' : v === 'smite' ? 'Smite' : 'Heal'}</button>`).join('');
+  // summoner spells: start from the saved pair (role-bound: junglers carry Smite) or the role default
+  const myTags = () => byId.get(hover[0] ?? picks[0][D_ROLES.indexOf(myRole)] ?? '')?.tags ?? [];
+  let sums: SumPair = fixSums(opts.sums ?? defaultSums(myRole), myRole);
+  mountSumPicker($('dspells'), {
+    get: () => sums,
+    fallback: () => defaultSums(myRole, myTags()),
+    onChange: (p) => {
+      if (p) sums = fixSums(p, myRole, myTags());
+    },
+    allowAuto: false,
+    sfx: () => opts.sfx('click'),
+  });
 
   const grid = $('dgrid');
   grid.innerHTML = champs
@@ -193,7 +205,7 @@ export function openDraft(opts: {
     ($('dlock') as HTMLButtonElement).disabled = true;
     setTimeout(() => {
       el.classList.add('hidden');
-      opts.onDone({ blue: picks[0] as string[], red: picks[1] as string[], bans: bans as string[], role: myRole, spell, pick });
+      opts.onDone({ blue: picks[0] as string[], red: picks[1] as string[], bans: bans as string[], role: myRole, sums, pick });
     }, 900);
   }
 
@@ -218,12 +230,6 @@ export function openDraft(opts: {
   $('dsearch').addEventListener('input', (e) => {
     query = (e.target as HTMLInputElement).value.trim().toLowerCase();
     renderGrid();
-  });
-  $('dspells').addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('button');
-    if (!b) return;
-    spell = b.dataset.s as typeof spell;
-    $('dspells').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   });
   $('dback').addEventListener('click', () => {
     ended = true;

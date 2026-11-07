@@ -33,8 +33,7 @@ export type Cmd =
   | { c: 'move'; x: number; y: number }
   | { c: 'attack'; id: number }
   | { c: 'cast'; s: number; x: number; y: number }
-  | { c: 'flash'; x: number; y: number }
-  | { c: 'heal'; id?: number } // Heal, or Smite (on a target) for junglers
+  | { c: 'sum'; s: number; x: number; y: number; id?: number } // summoner spell on D (0) or F (1); id = hovered unit
   | { c: 'ward'; x: number; y: number; pink?: boolean } // trinket ward, or a Control Ward when pink
   | { c: 'recall' }
   | { c: 'stop' }

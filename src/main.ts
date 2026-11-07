@@ -1,6 +1,8 @@
 import './style.css';
 import { quote, iconUrl } from './items';
 import { openDraft } from './draft';
+import { SUMS, byLevel, defaultSums, fixSums, mountSumPicker, parseSums, sumIcon } from './summoners';
+import type { SumId, SumPair } from './summoners';
 import { renderPost } from './postmatch';
 import type { PostData } from './postmatch';
 import { runeByKey, runeIcon } from './runes';
@@ -87,6 +89,7 @@ interface Dash {
   cb?: (e: Unit) => void; // kit hook: called once per enemy passed through
   end?: () => void; // kit hook: called when the dash finishes
   hitR?: number;
+  thru?: boolean; // ignores walls (Teleport travel)
 }
 type Order = { type: 'move'; x: number; y: number } | { type: 'attack'; target: Unit };
 interface Champ {
@@ -117,7 +120,7 @@ interface Champ {
   ranks: number[]; // points in Q W E R; one point per level, R at 6/11/16
   empower: { dmg: number; a: AbilityDef } | null; // bonus on the next basic attack
   role: Role;
-  spell2: 'heal' | 'smite';
+  sums: SumPair; // summoner spells on D and F
   azureT: number; // jungle buffs, seconds left
   emberT: number;
   wards: number; // trinket charges
@@ -610,7 +613,7 @@ function makeChamp(def: ChampDef, team: Team, role: Role, isPlayer: boolean): Un
     ranks: [0, 0, 0, 0],
     empower: null,
     role,
-    spell2: role === 'jungle' ? 'smite' : 'heal',
+    sums: defaultSums(role, def.tags ?? []),
     azureT: 0,
     emberT: 0,
     wards: 2,
@@ -670,7 +673,7 @@ let draftPlan: DraftPlan | null = null;
 let lastBans: string[] | null = null;
 const runeInfo = (k: string) => runeByKey(k);
 let soloRole: Role | 'fill' = 'mid';
-let soloSpell: 'auto' | 'heal' | 'smite' = 'auto'; // player's second summoner spell
+let soloSums: SumPair | null = null; // player's summoner spells (null = role default)
 function newGame(champId: string, humans: Human[] = []) {
   NEXT_ID = 1;
   cannonCount = 0;
@@ -766,7 +769,7 @@ function newGame(champId: string, humans: Human[] = []) {
         taken.add(def.id);
         const u = makeChamp(def, team, role, true);
         if (h.name) u.name = h.name;
-        if (h.peer === 'host' && soloSpell !== 'auto') u.champ!.spell2 = soloSpell;
+        if (h.peer === 'host' && soloSums) u.champ!.sums = fixSums(soloSums, role, def.tags ?? []);
         if (h.peer === 'host') slots.push(u);
         else remote.set(h.peer, u);
         units.push(u);
@@ -1008,12 +1011,13 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   if (type === 'phys' && t.shredT > 0) res *= 1 - t.shredPct;
   if (type === 'phys' && src.champ) res *= 1 - (KITS[src.champ.def.id]?.passive?.armorPen?.(src, t) ?? 0);
   if (t.drT > 0) amt *= 1 - t.drPct;
+  if (src.marks.exh && type !== 'true') amt *= 1 - src.marks.exh.v; // Exhaust: less damage dealt
   if (t.marks.pta && t.marks.pta.t > 0) amt *= 1 + t.marks.pta.v;
   if (t.champ?.runes.keystone === 'Aftershock' && (t.stunT > 0 || t.rootT > 0)) amt *= 0.8;
   let mult = src.champ ? diffOf(src).dmg : 1;
   // Dragon: each drake the team owns adds 5% damage
   if (src.champ && src.team < 2) mult *= 1 + 0.05 * G.drakes[src.team as Team];
-  if (src.champ && t.kind === 'monster' && src.champ.spell2 === 'smite') mult *= 1.75; // jungle companion: junglers clear faster
+  if (src.champ && t.kind === 'monster' && hasSum(src.champ, 'smite')) mult *= 1.75; // jungle companion: junglers clear faster
   // Baron Nashor: empowered minions near the team's champions
   if (src.kind === 'minion' && colossusOn(src.team) && G.units.some((c) => c.champ && !c.dead && c.team === src.team && dist(c, src) < 900)) mult *= 1.5;
   if (t.kind === 'minion' && colossusOn(t.team) && G.units.some((c) => c.champ && !c.dead && c.team === t.team && dist(c, t) < 900)) mult *= 0.6;
@@ -1085,6 +1089,7 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
 }
 
 function heal(u: Unit, amt: number) {
+  if (u.marks.gw) amt *= 1 - u.marks.gw.v; // Grievous Wounds
   const before = u.hp;
   u.hp = Math.min(u.maxHp, u.hp + amt);
   if (u.champ) u.champ.ms.healed += Math.max(0, u.hp - before);
@@ -1262,6 +1267,7 @@ function kill(t: Unit, src: Unit) {
     c.dash = null;
     c.buffs = [];
     c.recallT = 0;
+    c.st.tpT = 0;
     c.retreating = false;
     if (killer && killer.team !== t.team) {
       killer.champ!.kills++;
@@ -1327,7 +1333,7 @@ function performAttack(u: Unit, t: Unit) {
     dmg *= 1 + u.heat;
     u.heat = Math.min(1.2, u.heat + 0.4); // turret warm-up: +40% per consecutive shot on a champion
   } else if (u.kind === 'tower') u.heat = 0;
-  if (u.kind === 'monster' && t.champ?.spell2 === 'smite') dmg *= 0.55; // and take less from monsters
+  if (u.kind === 'monster' && !!t.champ && hasSum(t.champ, 'smite')) dmg *= 0.55; // and take less from monsters
   const ang = Math.atan2(t.y - u.y, t.x - u.x);
   u.lunge = 1;
   u.revealT = 1.2;
@@ -1841,19 +1847,20 @@ const kitApi: KApi = {
   ctx: statCtx,
   cc: (e, o) => {
     if (e.kind === 'tower' || e.kind === 'nexus' || e.kind === 'ward') return;
+    const ten = 1 - (e.marks.ten?.v ?? 0); // Tenacity (Cleanse) shortens disables, not airborne
     if (o.slow) {
       e.slowAmt = Math.max(e.slowT > 0 ? e.slowAmt : 0, o.slow);
-      e.slowT = Math.max(e.slowT, o.slowT ?? 1);
+      e.slowT = Math.max(e.slowT, (o.slowT ?? 1) * ten);
     }
-    if (o.stun) e.stunT = Math.max(e.stunT, o.stun);
-    if (o.root) e.rootT = Math.max(e.rootT, o.root);
+    if (o.stun) e.stunT = Math.max(e.stunT, o.stun * ten);
+    if (o.root) e.rootT = Math.max(e.rootT, o.root * ten);
     if (o.air) {
       e.stunT = Math.max(e.stunT, o.air);
       e.airT = Math.max(e.airT, o.air);
     }
-    if (o.silence) e.silenceT = Math.max(e.silenceT, o.silence);
+    if (o.silence) e.silenceT = Math.max(e.silenceT, o.silence * ten);
     if (o.charm && o.src) {
-      e.charmT = Math.max(e.charmT, o.charm);
+      e.charmT = Math.max(e.charmT, o.charm * ten);
       e.charmSrc = o.src;
     }
     if (o.pull) e.push = { tx: o.pull.x, ty: o.pull.y, speed: o.pullSpeed ?? 1800 };
@@ -1983,33 +1990,183 @@ const kitApi: KApi = {
 };
 setKitApi(kitApi);
 
-function castFlash(u: Unit, tx: number, ty: number) {
-  const c = u.champ!;
-  if (u.dead || c.spellCds[0] > 0 || c.dash) return;
-  const d = Math.hypot(tx - u.x, ty - u.y) || 1;
-  const reach = Math.min(d, 425);
-  burst(u.x, u.y, 14, { color: '#fff6a8', speed: 380, life: 0.3, size: 3 });
-  u.x = clamp(u.x + ((tx - u.x) / d) * reach, 40, MAP - 40);
-  u.y = clamp(u.y + ((ty - u.y) / d) * reach, 40, MAP - 40);
-  pushOut(u); // flashing into a wall lands on the nearest floor
-  burst(u.x, u.y, 18, { kind: 'ember', color: '#fff6a8', speed: 300, life: 0.4, size: 4 });
-  ring(u.x, u.y, 70, '#fff6a8', 0.35, 6);
-  c.spellCds[0] = 180;
-  sfx('flash', u, u === G.player ? 1 : 0.5);
-  c.recallT = 0;
-  if (c.order?.type === 'move') c.order = null;
+// ---------- summoner spells (D/F); data in src/summoners.ts ----------
+const hasSum = (c: Champ, id: SumId) => c.sums[0] === id || c.sums[1] === id;
+const sumSlot = (c: Champ, id: SumId) => c.sums.indexOf(id);
+// Unleashed Teleport from 10:00: 330 - 240 (by level) cooldown
+const sumCd = (c: Champ, id: SumId) => (id === 'teleport' && G.t >= 600 ? byLevel(330, 240, c.level) : SUMS[id].cd);
+const sumLevel = (u: Unit) => u.champ?.level ?? 1;
+
+function sumFx(u: Unit, id: SumId, r = 90) {
+  const col = SUMS[id].color;
+  if (!onScreen(u)) return;
+  ring(u.x, u.y, r, col, 0.5, 8);
+  burst(u.x, u.y, 14, { kind: 'ember', color: col, speed: 260, life: 0.45, size: 4 });
 }
-function castHeal(u: Unit) {
-  const c = u.champ!;
-  if (u.dead || c.spellCds[1] > 0 || c.spell2 !== 'heal') return;
-  heal(u, 90 + 20 * c.level);
-  c.buffs.push({ as: 0, ms: 0.3, t: 1.2 });
-  c.spellCds[1] = 150;
-  if (u === G.player) sfx('heal');
-  ring(u.x, u.y, 90, '#7dff9c', 0.5, 8);
-  for (let i = 0; i < 12; i++)
-    spawn({ kind: 'plus', x: u.x + (Math.random() - 0.5) * 70, y: u.y + (Math.random() - 0.5) * 40, vy: -120 - Math.random() * 80, life: 0.8, size: 5, color: '#7dff9c', drag: 1.5 });
+// enemy champion for a targeted summoner (Ignite, Exhaust): the one at the cursor, else the lowest in range
+function sumEnemy(u: Unit, range: number, id?: number): Unit | null {
+  const ok = (e: Unit | undefined | null): e is Unit => !!e && e.kind === 'champ' && e.team !== u.team && targetable(e) && dist(u, e) <= range + e.r;
+  const picked = id ? G.units.find((o) => o.id === id) : null;
+  if (ok(picked)) return picked;
+  let best: Unit | null = null;
+  for (const e of G.units) if (ok(e) && (!best || e.hp / e.maxHp < best.hp / best.maxHp)) best = e;
+  return best;
 }
+
+// Cast the summoner spell in slot s (0 = D, 1 = F). Returns true when it went off.
+function castSum(u: Unit, s: number, tx: number, ty: number, id?: number): boolean {
+  const c = u.champ!;
+  const sp = c.sums[s];
+  if (!sp || u.dead || c.dash || c.st.tpT > 0) return false;
+  if (sp === 'smite') return castSmite(u, id ? G.units.find((o) => o.id === id) : null);
+  if (c.spellCds[s] > 0) return false;
+  const L = sumLevel(u);
+  switch (sp) {
+    case 'flash': {
+      if (u.stunT > 0 || u.rootT > 0 || u.airT > 0) return false;
+      const d = Math.hypot(tx - u.x, ty - u.y) || 1;
+      const reach = Math.min(d, SUMS.flash.range);
+      burst(u.x, u.y, 14, { color: '#fff6a8', speed: 380, life: 0.3, size: 3 });
+      u.x = clamp(u.x + ((tx - u.x) / d) * reach, 40, MAP - 40);
+      u.y = clamp(u.y + ((ty - u.y) / d) * reach, 40, MAP - 40);
+      pushOut(u); // flashing into a wall lands on the nearest floor
+      burst(u.x, u.y, 18, { kind: 'ember', color: '#fff6a8', speed: 300, life: 0.4, size: 4 });
+      ring(u.x, u.y, 70, '#fff6a8', 0.35, 6);
+      sfx('flash', u, u === G.player ? 1 : 0.5);
+      c.recallT = 0;
+      if (c.order?.type === 'move') c.order = null;
+      break;
+    }
+    case 'ignite': {
+      const e = sumEnemy(u, SUMS.ignite.range, id);
+      if (!e) return false;
+      // 70 - 525 true damage over 5s, Grievous Wounds and reveal for the duration
+      kitApi.dot(u, e, byLevel(70, 525, L) / 5, 5, 'true', 'ignite');
+      e.marks.gw = { t: 5, v: 0.4, src: u };
+      e.revealT = Math.max(e.revealT, 5);
+      if (onScreen(e)) {
+        ring(e.x, e.y, e.r + 30, '#ff8a3d', 0.5, 7);
+        burst(e.x, e.y, 16, { kind: 'ember', color: '#ff8a3d', speed: 200, life: 0.6, size: 4, angle: -Math.PI / 2, spread: 1.2 });
+      }
+      break;
+    }
+    case 'exhaust': {
+      const e = sumEnemy(u, SUMS.exhaust.range, id);
+      if (!e) return false;
+      kitApi.cc(e, { slow: 0.4, slowT: 3 });
+      e.marks.exh = { t: 3, v: 0.35, src: u };
+      if (onScreen(e)) ring(e.x, e.y, e.r + 30, '#c9a36b', 0.6, 7);
+      break;
+    }
+    case 'ghost':
+      c.buffs.push({ as: 0, ms: byLevel(0.24, 0.5082, L), t: 10 });
+      u.marks.ghost = { t: 10, v: 1, src: u };
+      sumFx(u, sp, 70);
+      break;
+    case 'barrier':
+      giveShield(u, byLevel(100, 502.35, L), 2.5, '#ffe08a');
+      sumFx(u, sp, 80);
+      break;
+    case 'cleanse':
+      if (u.airT <= 0) u.stunT = 0;
+      u.rootT = u.slowT = u.silenceT = u.charmT = 0;
+      delete u.marks.exh;
+      u.dots = u.dots.filter((d) => d.tag !== 'ignite');
+      u.marks.ten = { t: 3, v: 0.75, src: u };
+      sumFx(u, sp, 80);
+      break;
+    case 'heal': {
+      const amt = byLevel(80, 346, L);
+      const allies = G.units.filter((a) => a !== u && a.kind === 'champ' && a.team === u.team && !a.dead && dist(a, u) <= SUMS.heal.range);
+      const near = allies.filter((a) => Math.hypot(a.x - tx, a.y - ty) <= 200).sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty))[0];
+      const ally = near ?? allies.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      for (const t of ally ? [u, ally] : [u]) {
+        heal(t, t.marks.sheal ? amt / 2 : amt);
+        t.marks.sheal = { t: 35, v: 1, src: u };
+        t.champ!.buffs.push({ as: 0, ms: 0.3, t: 1 });
+        if (onScreen(t)) {
+          ring(t.x, t.y, 90, '#7dff9c', 0.5, 8);
+          for (let i = 0; i < 10; i++)
+            spawn({ kind: 'plus', x: t.x + (Math.random() - 0.5) * 70, y: t.y + (Math.random() - 0.5) * 40, vy: -120 - Math.random() * 80, life: 0.8, size: 5, color: '#7dff9c', drag: 1.5 });
+        }
+      }
+      if (u === G.player || ally === G.player) sfx('heal');
+      break;
+    }
+    case 'teleport': {
+      const dest = tpDest(u, tx, ty);
+      if (!dest || u.stunT > 0 || u.rootT > 0) return false;
+      c.st.tpT = 3; // channel
+      c.st.tpTo = dest.id;
+      c.recallT = 0;
+      c.order = null;
+      if (u === G.player) sfx('recall');
+      return true; // cooldown starts when the channel completes
+    }
+  }
+  c.spellCds[s] = sumCd(c, sp);
+  return true;
+}
+
+// Teleport destination: the allied turret, minion or ward nearest the target point
+function tpDest(u: Unit, tx: number, ty: number): Unit | null {
+  let best: Unit | null = null;
+  let bd = Infinity;
+  for (const o of G.units) {
+    if (o.dead || o.team !== u.team || !(o.kind === 'tower' || o.kind === 'minion' || o.kind === 'ward')) continue;
+    const d = Math.hypot(o.x - tx, o.y - ty);
+    if (d < bd) {
+      bd = d;
+      best = o;
+    }
+  }
+  return best;
+}
+// Channel ticking; returns true while the champion is busy channeling.
+function tickTeleport(u: Unit, dt: number): boolean {
+  const c = u.champ!;
+  if (!(c.st.tpT > 0)) return false;
+  if (u.stunT > 0 || u.airT > 0 || u.charmT > 0 || u.silenceT > 0) {
+    c.st.tpT = 0; // interrupted by crowd control
+    return false;
+  }
+  if (onScreen(u) && Math.random() < 0.7) {
+    const a = G.t * 9 + Math.random();
+    spawn({ kind: 'ember', x: u.x + Math.cos(a) * (u.r + 14), y: u.y + Math.sin(a) * (u.r + 14), vx: 0, vy: -150, life: 0.6, size: 3.5, color: '#c77dff', drag: 1 });
+  }
+  if ((c.st.tpT -= dt) > 0) return true;
+  c.st.tpT = 0;
+  const s = sumSlot(c, 'teleport');
+  const dest = G.units.find((o) => o.id === c.st.tpTo);
+  if (s < 0 || !dest || dest.dead) return false; // target died during the channel
+  c.spellCds[s] = sumCd(c, 'teleport');
+  const unleashed = G.t >= 600;
+  // travel 0.5 - 5s (Unleashed 0.5 - 4s) by distance; untargetable and unable to act on the way
+  const d = Math.hypot(dest.x - u.x, dest.y - u.y);
+  const tx = dest.x + (dest.kind === 'tower' ? (BASES[u.team].x - dest.x > 0 ? 1 : -1) * (dest.r + 60) : 0);
+  const ty = dest.y + (dest.kind === 'tower' ? (BASES[u.team].y - dest.y > 0 ? 1 : -1) * (dest.r + 60) : 0);
+  const travel = clamp((d / MAP) * (unleashed ? 4 : 5), 0.5, unleashed ? 4 : 5);
+  u.untargT = Math.max(u.untargT, travel);
+  if (onScreen(u)) ring(u.x, u.y, 90, '#c77dff', 0.5, 8);
+  c.dash = {
+    tx,
+    ty,
+    speed: Math.max(1, Math.hypot(tx - u.x, ty - u.y) / travel),
+    dmg: 0,
+    a: null,
+    hit: new Set(),
+    thru: true,
+    end: () => {
+      pushOut(u);
+      u.untargT = 0;
+      if (unleashed) c.buffs.push({ as: 0, ms: 0.5, t: 3 });
+      ring(u.x, u.y, 110, '#c77dff', 0.6, 10);
+      u.fadeIn = 0.3;
+    },
+  };
+  return true;
+}
+
 function startRecall(u: Unit) {
   const c = u.champ!;
   if (u.dead || c.recallT > 0) return;
@@ -2153,6 +2310,23 @@ function updateChamp(u: Unit, dt: number) {
   const c = u.champ!;
   for (let i = 0; i < 4; i++) c.cds[i] = Math.max(0, c.cds[i] - dt);
   for (let i = 0; i < 2; i++) c.spellCds[i] = Math.max(0, c.spellCds[i] - dt);
+  {
+    // Smite: starts with 1 charge, a 2nd recharges every 90s starting at 0:48; 15s between casts
+    const ss = sumSlot(c, 'smite');
+    if (ss >= 0) {
+      if (c.st.smCh === undefined) {
+        c.st.smCh = 1;
+        c.st.smRe = Math.max(0, 48 - G.t) + 90;
+        c.st.smLock = 0;
+      }
+      if (c.st.smCh < 2 && (c.st.smRe -= dt) <= 0) {
+        c.st.smCh++;
+        c.st.smRe = 90;
+      }
+      c.st.smLock = Math.max(0, c.st.smLock - dt);
+      c.spellCds[ss] = c.st.smCh > 0 ? c.st.smLock : Math.max(c.st.smLock, c.st.smRe);
+    }
+  }
   if (c.azureT > 0) c.azureT = Math.max(0, c.azureT - dt);
   if (c.emberT > 0) c.emberT = Math.max(0, c.emberT - dt);
   if (c.wards < 2 && (c.wardCd -= dt) <= 0) {
@@ -2192,6 +2366,7 @@ function updateChamp(u: Unit, dt: number) {
     }
     return;
   }
+  if (tickTeleport(u, dt)) return;
   if (c.dash) {
     const d = c.dash;
     if (d.dmg > 0 && d.a) {
@@ -2228,7 +2403,7 @@ function updateChamp(u: Unit, dt: number) {
       const nx = u.x + ((d.tx - u.x) / rem) * step;
       const ny = u.y + ((d.ty - u.y) / rem) * step;
       // most dashes can't cross jungle walls
-      if (isWall(nx, ny)) {
+      if (!d.thru && isWall(nx, ny)) {
         d.tx = u.x;
         d.ty = u.y;
       } else {
@@ -2237,6 +2412,10 @@ function updateChamp(u: Unit, dt: number) {
       }
     }
     return;
+  }
+  if (!c.isPlayer && (u.stunT > 0.5 || u.charmT > 0.3 || u.rootT > 0.5) && u.airT <= 0) {
+    const s = sumSlot(c, 'cleanse');
+    if (s >= 0 && c.spellCds[s] <= 0 && nearestEnemy(u, 900, (e) => e.kind === 'champ')) castSum(u, s, u.x, u.y);
   }
   if (u.stunT > 0 || u.charmT > 0) return;
   if (!c.isPlayer) aiChamp(u, dt);
@@ -2418,7 +2597,7 @@ function aiJungle(u: Unit) {
   if (target) {
     // smite to secure buffs and epics, or to speed the clear when low
     const big = target.monster === 'azure' || target.monster === 'ember' || target.monster === 'drake' || target.monster === 'colossus';
-    if (c.spellCds[1] <= 0 && dist(u, target) < 500 && target.hp <= smiteDamage(u) && (big || u.hp / u.maxHp < 0.45 || c.level < 4)) castSmite(u, target);
+    if (smiteReady(c) && dist(u, target) < 500 && target.hp <= smiteDamage(u) && (big || u.hp / u.maxHp < 0.45 || c.level < 4)) castSmite(u, target);
     if (dist(u, target) < 700) for (let s = 0; s < 3; s++) {
       const a = c.def.abilities[s];
       if (c.cds[s] <= 0 && c.ranks[s] > 0 && u.mp >= costOf(c, s) * 2 && a.kind !== 'ally' && !(a.kind === 'buff' && a.stealth)) cast(u, s, target.x, target.y);
@@ -2441,6 +2620,45 @@ function aiWard(u: Unit) {
   placeWard(u, spot.x, spot.y);
 }
 
+// Bots use their summoner spells roughly the way players do.
+function aiSums(u: Unit, foe: Unit | null) {
+  const c = u.champ!;
+  const hpP = u.hp / u.maxHp;
+  const fd = foe ? dist(u, foe) : Infinity;
+  for (let s = 0; s < 2; s++) {
+    const sp = c.sums[s];
+    if (c.spellCds[s] > 0 || sp === 'smite' || sp === 'teleport' || sp === 'cleanse') continue;
+    if (sp === 'heal') {
+      const hurtAlly = G.units.some(
+        (a) => a !== u && a.kind === 'champ' && a.team === u.team && !a.dead && dist(a, u) <= SUMS.heal.range && a.hp / a.maxHp < 0.2 && !!nearestEnemy(a, 700, (e) => e.kind === 'champ'),
+      );
+      if ((hpP < 0.25 && fd < 900) || hurtAlly) castSum(u, s, u.x, u.y);
+    } else if (sp === 'barrier') {
+      if (hpP < 0.25 && fd < 800) castSum(u, s, u.x, u.y);
+    } else if (sp === 'ghost') {
+      if (foe && ((c.retreating && fd < 700) || (foe.hp / foe.maxHp < 0.3 && hpP > 0.4 && fd > u.range + 120 && fd < 900))) castSum(u, s, u.x, u.y);
+    } else if (sp === 'flash') {
+      const home = BASES[u.team];
+      if (foe && c.retreating && hpP < 0.15 && fd < 350) castSum(u, s, home.x, home.y);
+    } else if (sp === 'ignite') {
+      const e = sumEnemy(u, SUMS.ignite.range);
+      if (e && (e.hp < byLevel(70, 525, c.level) * 1.5 || (e.hp / e.maxHp < 0.4 && hpP > 0.3))) castSum(u, s, e.x, e.y, e.id);
+    } else if (sp === 'exhaust') {
+      const e = sumEnemy(u, SUMS.exhaust.range);
+      if (e && (hpP < 0.4 || e.hp / e.maxHp < 0.3)) castSum(u, s, e.x, e.y, e.id);
+    }
+  }
+}
+// Laners leaving the fountain teleport back to their lane's front turret.
+function aiTeleport(u: Unit) {
+  const c = u.champ!;
+  const s = sumSlot(c, 'teleport');
+  if (s < 0 || c.spellCds[s] > 0 || c.role === 'jungle' || G.t < 90 || u.hp / u.maxHp < 0.9) return;
+  const home = BASES[u.team];
+  const tw = G.units.filter((t) => t.kind === 'tower' && !t.dead && t.team === u.team && t.lane === c.lane).sort((a, b) => a.tier - b.tier)[0];
+  if (tw && dist(tw, home) > 6000) castSum(u, s, tw.x, tw.y);
+}
+
 function aiChamp(u: Unit, dt: number) {
   const c = u.champ!;
   c.think -= dt;
@@ -2456,13 +2674,15 @@ function aiChamp(u: Unit, dt: number) {
       return;
     }
     c.retreating = false;
+    aiTeleport(u);
+    if (c.st.tpT > 0) return;
   }
   const foe = nearestEnemy(u, 900, (e) => e.kind === 'champ');
+  aiSums(u, foe);
 
   // --- retreat / recall ---
   if (hpP < 0.3 || c.retreating) {
     c.retreating = true;
-    if (hpP < 0.25) castHeal(u);
     if (!foe || dist(u, foe) > 1100) {
       if (dist(u, home) > 1200) startRecall(u);
       else c.order = { type: 'move', x: home.x, y: home.y };
@@ -2650,7 +2870,8 @@ const MONSTERS: Record<MonsterType, MonsterStat> = {
   colossus: { name: 'Baron Nashor', hp: 9000, ad: 150, range: 250, as: 0.75, r: 110, armor: 120, mr: 70, ms: 350, gold: 0, xp: 0 },
 };
 const colossusOn = (team: Side) => team < 2 && !!G && G.colossus[team as Team] > G.t;
-const smiteDamage = (u: Unit) => 450 + 25 * u.champ!.level;
+const smiteDamage = (_u: Unit) => 600;
+const smiteReady = (c: Champ) => hasSum(c, 'smite') && (c.st.smCh ?? 1) > 0 && !(c.st.smLock > 0);
 
 function updateCamps() {
   for (const cs of G.camps) {
@@ -2756,7 +2977,7 @@ function monsterKilled(t: Unit, killer: Unit | null) {
   }
   if (!killer?.champ) return;
   const team = killer.team as Team;
-  if (killer.champ.spell2 === 'smite') heal(killer, 30 + killer.maxHp * 0.06); // companion sustain
+  if (hasSum(killer.champ, 'smite')) heal(killer, 30 + killer.maxHp * 0.06); // companion sustain
   giveGold(killer, st.gold);
   gainXp(killer, st.xp);
   killer.champ.cs += t.monster === 'bird' || t.monster === 'boar' ? 1 : 4;
@@ -2781,7 +3002,7 @@ function monsterKilled(t: Unit, killer: Unit | null) {
 // Smite: big true-damage hit on a monster or minion; the jungler's summoner spell.
 function castSmite(u: Unit, target?: Unit | null): boolean {
   const c = u.champ!;
-  if (u.dead || c.spellCds[1] > 0 || c.spell2 !== 'smite') return false;
+  if (u.dead || !smiteReady(c)) return false;
   const ok = (e: Unit | null | undefined): e is Unit => !!e && targetable(e) && (e.kind === 'monster' || (e.kind === 'minion' && e.team !== u.team)) && dist(u, e) <= 500 + e.r;
   let t = ok(target) ? target : null;
   if (!t) {
@@ -2796,7 +3017,9 @@ function castSmite(u: Unit, target?: Unit | null): boolean {
       }
   }
   if (!t) return false;
-  c.spellCds[1] = 75;
+  c.st.smCh--;
+  c.st.smLock = SUMS.smite.cd;
+  c.spellCds[sumSlot(c, 'smite')] = SUMS.smite.cd;
   const dmg = smiteDamage(u);
   t.hp -= dmg; // true damage, ignores shields and resistances
   t.hitFlash = 0.2;
@@ -3094,6 +3317,7 @@ function update(dt: number) {
       const d = Math.hypot(dx, dy) || 0.01;
       if (d >= min) continue;
       const push = (min - d) / 2;
+      if (a.marks.ghost || b.marks.ghost) continue; // Ghost: ignores unit collision
       const ka = a.champ?.dash ? 0 : 1;
       const kb = b.champ?.dash ? 0 : 1;
       a.x -= (dx / d) * push * ka;
@@ -3348,6 +3572,18 @@ function render() {
       drawGlow(d, u.x, u.y, u.r * 3, '#4aa3ff', 0.35 + 0.4 * k);
       d.globalCompositeOperation = 'source-over';
       d.strokeStyle = '#6fb8ff';
+      d.lineWidth = 8;
+      d.beginPath();
+      d.arc(u.x, u.y, u.r + 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
+      d.stroke();
+    }
+    if (c.st.tpT > 0) {
+      // Teleport channel: purple ring filling over 3s
+      const k = 1 - c.st.tpT / 3;
+      d.globalCompositeOperation = 'lighter';
+      drawGlow(d, u.x, u.y, u.r * 3, '#c77dff', 0.35 + 0.4 * k);
+      d.globalCompositeOperation = 'source-over';
+      d.strokeStyle = '#d6a2ff';
       d.lineWidth = 8;
       d.beginPath();
       d.arc(u.x, u.y, u.r + 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
@@ -3705,17 +3941,15 @@ function buildHud() {
   const keys = ['Q', 'W', 'E', 'R', 'D', 'F'];
   const defs = [
     ...c.def.abilities.map((a) => ({ name: a.name, desc: a.desc, color: a.color, cd: a.cds ? a.cds.join('/') : a.cd, extra: abilityCostText(c.def, a) })),
-    { name: 'Flash', desc: 'Blink a short distance.', color: '#fff6a8', cd: 180, extra: '' },
-    c.spell2 === 'smite'
-      ? { name: 'Smite', desc: 'Deal heavy true damage to a monster or minion (hover it, or the nearest is chosen). Secures buffs and epic monsters.', color: '#ffcf6a', cd: 75, extra: '' }
-      : { name: 'Heal', desc: 'Restore health and gain a burst of speed.', color: '#7dff9c', cd: 150, extra: '' },
+    ...c.sums.map((id) => ({ name: SUMS[id].name, desc: SUMS[id].desc, color: SUMS[id].color, cd: SUMS[id].cd, extra: '', icon: sumIcon(id) })),
   ];
   defs.forEach((d, i) => {
     const el = document.createElement('div');
     el.className = 'slot' + (i > 3 ? ' spell' : '');
     el.title = `${d.name} (${keys[i]}) — ${d.desc} Cooldown ${d.cd}s${d.extra}${i === 0 && c.def.passive ? `\nPassive, ${c.def.passive.name}: ${c.def.passive.desc}` : ''}`;
     const cost = i < 4 ? costOf(c, i) : 0;
-    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)">${i > 3 ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>${
+    const icon = 'icon' in d ? d.icon : '';
+    el.innerHTML = `<div class="ico" style="${icon ? `background:#111 url(${icon}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)`}">${i > 3 ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>${
       i < 4 ? `<span class="mana">${cost}</span><div class="pips"></div><button class="plus" title="Learn (Ctrl+${keys[i]})">+</button>` : ''
     }`;
     if (i < 4)
@@ -3780,7 +4014,7 @@ function updateHud() {
   $('hptrail').style.transform = `scaleX(${clamp(P.hp / P.maxHp, 0, 1)})`;
   setText($('shopgold'), 'sgold', `${gold} gold`);
   const all = [...c.cds, ...c.spellCds];
-  const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), 180, 150];
+  const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), ...c.sums.map((id) => (id === 'smite' && c.st.smCh === 0 ? 90 : sumCd(c, id)))];
   const ws = document.getElementById('wardslot');
   if (ws) {
     const cc = G.player.champ!;
@@ -4043,8 +4277,7 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (k === 'd') command({ c: 'flash', x: w.x, y: w.y });
-  else if (k === 'f') command({ c: 'heal', id: hoverUnit(30)?.id });
+  if (k === 'd' || k === 'f') command({ c: 'sum', s: k === 'd' ? 0 : 1, x: w.x, y: w.y, id: hoverUnit(30)?.id });
   else if (k === '4') command({ c: 'ward', x: w.x, y: w.y });
   else if (k === '5') command({ c: 'ward', x: w.x, y: w.y, pink: true });
   else if (k === 'b') command({ c: 'recall' });
@@ -4148,6 +4381,7 @@ interface TouchBtn {
   r: number;
   size: number;
   color: string;
+  icon?: string;
   el?: HTMLElement;
   cd?: HTMLElement;
   cdt?: HTMLElement;
@@ -4156,7 +4390,10 @@ let touchBtns: TouchBtn[] = [];
 
 function aimReach(slot: number): number {
   const P = G.player;
-  if (slot === 4) return 425;
+  if (slot >= 4) {
+    const sp = P.champ!.sums[slot - 4];
+    return sp === 'teleport' ? 3000 : SUMS[sp].range;
+  }
   const a = P.champ!.def.abilities[slot];
   if (a.aim) return a.aim.shape === 'self' || a.aim.shape === 'none' ? 0 : a.aim.reach;
   if (a.kind === 'beam') return 1300;
@@ -4198,7 +4435,7 @@ function quickTarget(slot: number): Vec {
   const reach = aimReach(slot);
   const def = slot < 4 ? P.champ!.def.abilities[slot] : null;
   if (def && (def.kind === 'buff' || def.selfCenter)) return { x: P.x + facing.x, y: P.y + facing.y };
-  if (slot !== 4 && def?.kind !== 'dash') {
+  if (slot < 4 && def?.kind !== 'dash') {
     const extra = def?.kind === 'nova' ? (def.radius ?? 0) * 0.5 : 0;
     const t = autoTarget(reach + extra, (u) => u.kind === 'champ' || u.kind === 'minion');
     if (t) return { x: t.x, y: t.y };
@@ -4208,7 +4445,7 @@ function quickTarget(slot: number): Vec {
 
 function touchCast(slot: number, at: Vec) {
   const P = G.player;
-  if (slot === 4) command({ c: 'flash', x: at.x, y: at.y });
+  if (slot >= 4) command({ c: 'sum', s: slot - 4, x: at.x, y: at.y });
   else if (castReady(P, slot)) command({ c: 'cast', s: slot, x: at.x, y: at.y });
   else {
     sfx('nope');
@@ -4435,10 +4672,8 @@ function buildTouch() {
     { id: 'w', label: ab[1].name, angle: 140, r: 122, size: 62, color: ab[1].color },
     { id: 'e', label: ab[2].name, angle: 100, r: 122, size: 62, color: ab[2].color },
     { id: 'r', label: ab[3].name, angle: 148, r: 205, size: 68, color: ab[3].color },
-    { id: 'd', label: 'Flash', angle: 102, r: 205, size: 48, color: '#fff6a8' },
-    G.player.champ!.spell2 === 'smite'
-      ? { id: 'f', label: 'Smite', angle: 72, r: 200, size: 48, color: '#ffcf6a' }
-      : { id: 'f', label: 'Heal', angle: 72, r: 200, size: 48, color: '#7dff9c' },
+    { id: 'd', label: SUMS[G.player.champ!.sums[0]].name, angle: 102, r: 205, size: 48, color: SUMS[G.player.champ!.sums[0]].color, icon: sumIcon(G.player.champ!.sums[0]) },
+    { id: 'f', label: SUMS[G.player.champ!.sums[1]].name, angle: 72, r: 200, size: 48, color: SUMS[G.player.champ!.sums[1]].color, icon: sumIcon(G.player.champ!.sums[1]) },
     { id: 'minion', label: 'Minion', angle: 222, r: 100, size: 42, color: '#8fa3b8' },
     { id: 'tower', label: 'Turret', angle: 50, r: 98, size: 42, color: '#b88f8f' },
   ];
@@ -4446,7 +4681,7 @@ function buildTouch() {
     const el = document.createElement('div');
     el.className = `tbtn tb-${b.id}`;
     const rs = ['q', 'w', 'e', 'r'].indexOf(b.id);
-    el.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)"></div><span class="lbl">${b.label}</span><div class="cd"></div><div class="cdt"></div>${
+    el.innerHTML = `<div class="ico" style="${b.icon ? `background:#111 url(${b.icon}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)`}"></div><span class="lbl">${b.label}</span><div class="cd"></div><div class="cdt"></div>${
       rs >= 0 ? '<div class="tplus">+</div>' : ''
     }`;
     if (rs >= 0)
@@ -4466,7 +4701,7 @@ function buildTouch() {
 
 function bindTouchBtn(b: TouchBtn) {
   const el = b.el!;
-  const slot = ['q', 'w', 'e', 'r', 'd'].indexOf(b.id);
+  const slot = ['q', 'w', 'e', 'r', 'd', 'f'].indexOf(b.id);
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (!running || G.player.dead) return;
@@ -4480,8 +4715,11 @@ function bindTouchBtn(b: TouchBtn) {
       attackHeld = b.id === 'atk' ? 'any' : b.id;
       attackTick = 0.25;
       touchAttack(attackHeld);
-    } else if (b.id === 'f') {
-      command({ c: 'heal' });
+    } else if (slot >= 4 && !SUMS[G.player.champ!.sums[slot - 4]].aim) {
+      // targeted / self summoners fire on tap at the best target
+      const sp = G.player.champ!.sums[slot - 4];
+      const t = sp === 'ignite' || sp === 'exhaust' ? autoTarget(SUMS[sp].range, (u) => u.kind === 'champ') : sp === 'smite' ? autoTarget(SUMS[sp].range + 60, (u) => u.kind === 'monster' || u.kind === 'minion') : null;
+      command({ c: 'sum', s: slot - 4, x: t?.x ?? G.player.x, y: t?.y ?? G.player.y, id: t?.id });
     } else if (slot >= 0) {
       const r = el.getBoundingClientRect();
       aim = { slot, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0, aiming: false, cancel: false };
@@ -4519,7 +4757,7 @@ function updateTouchHud() {
   if (!TOUCH) return;
   const P = G.player;
   const c = P.champ!;
-  const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), 180, 150];
+  const maxes = [...c.def.abilities.map((_, i) => cdOf(c, i)), ...c.sums.map((id) => (id === 'smite' && c.st.smCh === 0 ? 90 : sumCd(c, id)))];
   const vals = [...c.cds, ...c.spellCds];
   for (const b of touchBtns) {
     const i = ['q', 'w', 'e', 'r', 'd', 'f'].indexOf(b.id);
@@ -4668,25 +4906,37 @@ function applyCmd(u: Unit, cmd: Cmd) {
     case 'move':
       if (u.dead) return;
       c.recallT = 0;
+      c.st.tpT = 0; // moving cancels a Teleport channel
       c.order = { type: 'move', x: clamp(cmd.x, 30, MAP - 30), y: clamp(cmd.y, 30, MAP - 30) };
       break;
     case 'attack': {
       const t = G.units.find((o) => o.id === cmd.id);
       if (!t || u.dead || t.team === u.team || !targetable(t)) return;
       c.recallT = 0;
+      c.st.tpT = 0;
       c.order = { type: 'attack', target: t };
       break;
     }
     case 'cast':
+      c.st.tpT = 0;
       cast(u, cmd.s, cmd.x, cmd.y);
       break;
-    case 'flash':
-      castFlash(u, cmd.x, cmd.y);
+    case 'sum': {
+      const sp = c.sums[cmd.s];
+      if (!sp || u.dead) return;
+      if (!castSum(u, cmd.s, cmd.x, cmd.y, cmd.id)) {
+        const why =
+          c.spellCds[cmd.s] > 0 || (sp === 'smite' && !smiteReady(c))
+            ? `${SUMS[sp].name} is on cooldown`
+            : sp === 'ignite' || sp === 'exhaust'
+              ? 'No enemy champion in range'
+              : sp === 'smite'
+                ? 'No monster or minion in range'
+                : '';
+        if (why && u === G.player) addText(u.x, u.y - 60, why, '#aaa', 14);
+      }
       break;
-    case 'heal':
-      if (c.spell2 === 'smite') castSmite(u, cmd.id ? G.units.find((o) => o.id === cmd.id) : null);
-      else castHeal(u);
-      break;
+    }
     case 'ward':
       if (!placeWard(u, cmd.x, cmd.y, !!cmd.pink)) addText(u.x, u.y - 60, cmd.pink ? 'No Control Ward' : 'Ward on cooldown', '#aaa', 14);
       break;
@@ -4696,6 +4946,7 @@ function applyCmd(u: Unit, cmd: Cmd) {
     case 'stop':
       c.order = null;
       c.recallT = 0;
+      c.st.tpT = 0;
       break;
     case 'rank':
       rankUp(u, cmd.s);
@@ -4709,7 +4960,7 @@ function applyCmd(u: Unit, cmd: Cmd) {
 // ---- host -> guest snapshots ----
 const KINDS: Kind[] = ['champ', 'minion', 'tower', 'nexus', 'monster', 'ward'];
 type URow = [number, number, Side, number, number, number, number, number, number, number, string, number, number, number, number, string, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
-type CRow = [number, string, number, number, number, string[], number[], number[], number, number, number, number, number, number[], number, number, number, string, number, number, number, number, number, number, number, number];
+type CRow = [number, string, number, number, number, string[], number[], number[], number, number, number, number, number, number[], number, number, number, string, number, number, number, number, number, number, number, number, string?];
 type PRow = [number, number, string, number, number, number, number, number, number];
 interface Snap {
   t: number;
@@ -4745,7 +4996,7 @@ function encodeSnap(): Snap {
         return [
           u.id, c.def.id, c.level, Math.round(c.xp), Math.floor(c.gold), c.items, c.cds.map(r1), c.spellCds.map(r1), r1(c.respawnT),
           c.kills, c.deaths, c.assists, c.cs, c.ranks, r2(c.recallT), c.buffs.length, c.dash ? 1 : 0, u.name, ROLES.indexOf(c.role),
-          Math.round(u.ad), Math.round(u.ap), Math.round(u.armor), Math.round(u.mr), r2(effAS(u)), Math.round(effMS(u) || u.ms), c.haste,
+          Math.round(u.ad), Math.round(u.ap), Math.round(u.armor), Math.round(u.mr), r2(effAS(u)), Math.round(effMS(u) || u.ms), c.haste, c.sums.join(','),
         ];
       }),
     p: G.projs.map((p) => [r1(p.x), r1(p.y), p.color, p.homing?.id ?? 0, p.width, r2(p.dx), r2(p.dy), KINDS.indexOf(p.owner.kind), r1(p.max)]),
@@ -4890,6 +5141,10 @@ function applySnap(s: Snap) {
     u.as = r[23];
     u.ms = r[24];
     c.haste = r[25];
+    if (typeof r[26] === 'string' && r[26] !== c.sums.join(',')) {
+      c.sums = r[26].split(',') as SumPair;
+      if (u === G.player) buildHud();
+    }
     // personal feedback the host doesn't send
     if (!first && G && u === G.player) {
       if (c.level > was.level) levelUpFx(u);
@@ -5609,27 +5864,28 @@ function champDetail(id: string) {
       .join('')}</ul>`;
 }
 function buildSums() {
-  const el = $('sums');
   try {
-    const saved = localStorage.getItem('rift-spell');
-    if (saved === 'heal' || saved === 'smite' || saved === 'auto') soloSpell = saved;
+    soloSums = parseSums(localStorage.getItem('rift-sums'));
   } catch {
     // storage unavailable
   }
-  const opts: [typeof soloSpell, string][] = [['auto', 'Auto (Smite if jungle)'], ['smite', 'Smite'], ['heal', 'Heal']];
-  el.innerHTML = `<span>Summoner (F)</span>` + opts.map(([v, l]) => `<button data-s="${v}" class="${v === soloSpell ? 'on' : ''}">${l}</button>`).join('');
-  el.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
-    if (!b) return;
-    soloSpell = b.dataset.s as typeof soloSpell;
-    el.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
-    try {
-      localStorage.setItem('rift-spell', soloSpell);
-    } catch {
-      // storage unavailable
-    }
-    sfx('click');
+  sumPicker = mountSumPicker($('sums'), {
+    get: () => soloSums,
+    allowAuto: true,
+    fallback: () => defaultSums(soloRole === 'fill' ? 'mid' : soloRole, CHAMPS.find((c) => c.id === picked)?.tags ?? []),
+    onChange: (p) => saveSums(p),
+    sfx: () => sfx('click'),
   });
+}
+let sumPicker: { refresh: () => void } | null = null;
+function saveSums(p: SumPair | null) {
+  soloSums = p;
+  try {
+    if (p) localStorage.setItem('rift-sums', p.join(','));
+    else localStorage.removeItem('rift-sums');
+  } catch {
+    // storage unavailable
+  }
 }
 function buildRoles() {
   const el = $('roles');
@@ -5723,17 +5979,13 @@ function openChampSelect() {
   openDraft({
     champs: CHAMPS,
     role: soloRole,
-    spell: soloSpell,
+    sums: soloSums,
     sfx: (n) => sfx(n as Parameters<typeof sfx>[0]),
     onCancel: () => {},
     onDone: (r) => {
       soloRole = r.role;
-      soloSpell = r.spell;
-      try {
-        localStorage.setItem('rift-spell', soloSpell);
-      } catch {
-        // storage unavailable
-      }
+      saveSums(r.sums);
+      sumPicker?.refresh();
       draftPlan = { teams: [r.blue, r.red], bans: r.bans };
       lastBans = r.bans;
       picked = r.pick;
