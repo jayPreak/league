@@ -1427,8 +1427,25 @@ function moveToward(u: Unit, x: number, y: number, dt: number, speedMul = 1): bo
     if (tx !== x || ty !== y) u.path.shift();
     return tx === x && ty === y;
   }
-  u.x += (dx / d) * step;
-  u.y += (dy / d) * step;
+  let nx = u.x + (dx / d) * step;
+  let ny = u.y + (dy / d) * step;
+  // The line-of-sight test samples every 60 units, so a step can still clip a wall cell's corner;
+  // pushOut would then snap the unit back to the same spot every frame and it would never move.
+  // Slide along whichever axis is free instead, like League's wall sliding.
+  if (isWall(nx, ny) && !isWall(u.x, u.y)) {
+    const slide = (comp: number) => Math.sign(comp) * Math.max(Math.abs(comp), step * 0.7);
+    if (!isWall(nx, u.y) && Math.abs(dx) > 0.01) {
+      nx = u.x + slide((dx / d) * step);
+      ny = u.y;
+      if (isWall(nx, ny)) nx = u.x + (dx / d) * step;
+    } else if (!isWall(u.x, ny) && Math.abs(dy) > 0.01) {
+      nx = u.x;
+      ny = u.y + slide((dy / d) * step);
+      if (isWall(nx, ny)) ny = u.y + (dy / d) * step;
+    }
+  }
+  u.x = nx;
+  u.y = ny;
   return false;
 }
 
@@ -3091,8 +3108,11 @@ function update(dt: number) {
       const d = dist(m, s) || 0.01;
       const min = m.r + s.r;
       if (d < min) {
-        m.x = s.x + ((m.x - s.x) / d) * min;
-        m.y = s.y + ((m.y - s.y) / d) * min;
+        // push out, turned slightly around the structure so a unit walking straight at it
+        // (mid laners leaving the fountain line up exactly with the nexus) slides past instead of sticking
+        const ang = Math.atan2(m.y - s.y, m.x - s.x) + (min - d > 0.5 ? 0.04 : 0);
+        m.x = s.x + Math.cos(ang) * min;
+        m.y = s.y + Math.sin(ang) * min;
       }
     }
   }
