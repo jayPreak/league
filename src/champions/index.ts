@@ -203,12 +203,16 @@ function buildGeneric(): ChampDef[] {
   return (generic as unknown as GenChamp[]).map((g) => {
     const st = g.stats;
     const color = CLASS_COLOR[g.tags[0]] ?? '#c8aa6e';
-    const abilities: AbilityDef[] = g.spells.map((sp) => ({
+    const abilities: AbilityDef[] = g.spells.map((sp) => {
+      // self-cast areas listed with a tiny radius (e.g. a 20-unit "range" for a transform) get a sensible area
+      if (sp.aim.shape === 'self' && (sp.aim.r ?? 0) < 150) sp = { ...sp, aim: { ...sp.aim, r: 350 }, radius: 350 };
+      return {
       name: sp.name, desc: sp.desc, kind: sp.kind, cd: sp.cds[0] ?? 8, cds: sp.cds, cost: sp.costs[0] ?? 0, costs: sp.costs, costType: sp.costType,
       range: sp.range, ranges: sp.ranges, base: sp.base > 1500 ? 0 : sp.base, perLvl: sp.base > 1500 ? 0 : sp.perLvl, adR: sp.adR, apR: sp.apR, dmgType: sp.dmgType, perRank: true,
       color, width: sp.aim.shape === 'cone' ? Math.min(500, Math.max(150, 2 * sp.aim.reach * Math.tan(((sp.aim.deg ?? 40) * Math.PI) / 360))) : sp.width, pierce: sp.aim.shape === 'cone' || (sp.kind === 'bolt' && /\b(all|every) enem/i.test(sp.desc)) || undefined, speed: sp.speed, radius: sp.aim.shape === 'target' ? sp.radius || 90 : sp.radius, selfCenter: sp.selfCenter, aim: sp.aim,
       stun: sp.stun, slow: sp.slow, slowT: sp.slow ? 1.5 : undefined, root: sp.root, knockup: sp.knockup,
-    }));
+    };
+    });
     return {
       id: g.id, name: g.name, title: g.title.replace(/^./, (c) => c.toUpperCase()), role: g.tags.join(' / '), tags: g.tags, color,
       hp: st.hp, hpL: st.hpperlevel, ad: st.attackdamage, adL: st.attackdamageperlevel, armor: st.armor, armorL: st.armorperlevel,

@@ -15,7 +15,12 @@ function dust(u: Unit, t: Unit) {
     const secs = K.pv(u, 'Duration', 'LilliaPDoT');
     K.dot(u, t, total / secs, secs, 'magic', 'lilliaP');
     K.mark(t, 'lilDot', secs, 1, u);
-    if (t.kind === 'champ') K.heal(u, u.maxHp * 0.0); // heal comes from her damage over time below
+    // she heals off the burn on monsters (big monsters heal more); champion healing is not in the export, so none
+    if (t.kind === 'monster') {
+      const big = t.maxHp > 1500;
+      const pct = K.pv(u, 'MonsterHealingPercent', 'LilliaP') * (big ? K.pv(u, 'LargeMonsterHealMod', 'LilliaP') : 1);
+      K.later(secs, () => !u.dead && K.heal(u, total * pct));
+    }
   }
   K.mark(t, DUST, K.pv(u, 'Duration', 'LilliaPDoT') + 0.5, 1, u);
   // Prance: every spell hit stacks move speed (Q rank sets the strength)

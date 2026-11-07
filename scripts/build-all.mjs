@@ -10,7 +10,16 @@ writeFileSync('node_modules/.cache/ref.mjs', transformSync(src, { loader: 'ts', 
 const { evalCalc } = await import(process.cwd() + '/node_modules/.cache/ref.mjs');
 const [ver] = await (await fetch('https://ddragon.leagueoflegends.com/api/versions.json')).json();
 const dd = (p) => `https://ddragon.leagueoflegends.com/cdn/${ver}/${p}`;
-const get = async (u) => { for (let i = 0; i < 3; i++) { try { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return await r.json(); } catch (e) { if (i == 2) throw new Error(u + ' ' + e.message); } } };
+const CACHE = 'node_modules/.cache/riot';
+mkdirSync(CACHE, { recursive: true });
+const get = async (u) => {
+  const f = CACHE + '/' + u.replace(/[^a-z0-9.]+/gi, '_');
+  if (existsSync(f)) return JSON.parse(readFileSync(f, 'utf8'));
+  const j = await getNet(u);
+  writeFileSync(f, JSON.stringify(j));
+  return j;
+};
+const getNet = async (u) => { for (let i = 0; i < 3; i++) { try { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return await r.json(); } catch (e) { if (i == 2) throw new Error(u + ' ' + e.message); } } };
 const dl = async (u, f) => { if (existsSync(f)) return; try { const r = await fetch(u); if (r.ok) writeFileSync(f, Buffer.from(await r.arrayBuffer())); } catch {} };
 const pool = async (arr, n, fn) => { let i = 0; await Promise.all(Array.from({ length: n }, async () => { while (i < arr.length) { const x = arr[i++]; await fn(x); } })); };
 const plain = (t) => (t ?? '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\{\{[^}]*\}\}/g, '').replace(/%i:[A-Za-z]+%/g, '').replace(/\s+/g, ' ').trim();
@@ -34,6 +43,16 @@ await pool(ids, 8, async (id) => {
     const p = g[1].mChildSpells.find((c) => c.toLowerCase().endsWith('/' + name.toLowerCase()));
     return cd[p]?.mSpell ?? null;
   };
+  // every spell record in the same ability group (missiles, recasts, sub-spells) - damage often lives there
+  const siblings = (name) => {
+    if (!cd) return [];
+    const g = groups.find(([, v]) => v.mChildSpells.some((c) => c.toLowerCase().endsWith('/' + name.toLowerCase())));
+    const kids = g ? g[1].mChildSpells.map((p) => cd[p]?.mSpell).filter(Boolean) : [];
+    // also loose spell records whose path names this spell (e.g. .../FizzQ/FizzQMissile)
+    const loose = Object.entries(cd).filter(([k, v]) => v.mSpell && k.toLowerCase().includes('/' + name.toLowerCase())).map(([, v]) => v.mSpell);
+    return [...new Set([...kids, ...loose])];
+  };
+  const S = { level: 9, ap: 100, ad: 150, bonusAd: 60, armor: 80, bonusArmor: 30, mr: 50, bonusMr: 10, maxHp: 2000, bonusHp: 600, hp: 1500, mana: 800, maxMana: 800 };
   const spells = d.spells.map((s, i) => {
     const raw = spellGame(s.id);
     const g = raw && { DataValues: Object.fromEntries((raw.DataValues ?? []).filter((x) => Array.isArray(x.values)).map((x) => [x.name, x.values])), calcs: raw.mSpellCalculations ?? {} };
@@ -42,28 +61,51 @@ await pool(ids, 8, async (id) => {
     // damage: first damage-like calculation that evaluates above zero
     let base = 0, perLvl = 0, adR = 0, apR = 0, dmgType = /physical damage/i.test(text) && !/magic damage/i.test(text) ? 'phys' : /true damage/i.test(text) && !/magic damage/i.test(text) ? 'true' : 'magic';
     let calcName = null;
-    if (g) {
-      const names = Object.keys(g.calcs).filter((n) => /damage|dmg/i.test(n) && !/(heal|shield|per|bonus|max|mini|reduc|total|aoe|sec|tick)/i.test(n));
-      const all = names.length ? names : Object.keys(g.calcs).filter((n) => /damage|dmg/i.test(n));
-      for (const n of all) {
-        try { if (evalCalc(g, n, 1, Z) > 0) { calcName = n; break; } } catch {}
+    let gDmg = g;
+    const tryCalcs = (gg) => {
+      if (!gg) return null;
+      const names = Object.keys(gg.calcs).filter((n) => /damage|dmg/i.test(n) && !/(heal|shield|per|bonus|max|mini|reduc|total|aoe|sec|tick|cap|monster|minion|tooltip|amp|percent)/i.test(n));
+      const fallback = Object.keys(gg.calcs).filter((n) => /damage|dmg/i.test(n) && !/(heal|shield|reduc|cap|monster|minion|amp|percent)/i.test(n));
+      for (const n of [...names, ...fallback]) {
+        try { const v = evalCalc(gg, n, 1, S); if (v > 0 && v < 4000) return n; } catch {}
       }
-      if (calcName) {
-        const e = (rank, o = {}) => evalCalc(g, calcName, rank, { ...Z, ...o });
-        base = e(1); perLvl = (e(ranks) - e(1)) / (ranks - 1);
-        apR = (e(1, { ap: 100 }) - base) / 100; adR = (e(1, { ad: 100, bonusAd: 100 }) - base) / 100;
-        if (!isFinite(base)) base = 0;
+      return null;
+    };
+    calcName = tryCalcs(g);
+    if (!calcName) {
+      for (const sib of siblings(s.id)) {
+        if (sib === raw) continue;
+        const gg = { DataValues: Object.fromEntries((sib.DataValues ?? []).filter((x) => Array.isArray(x.values)).map((x) => [x.name, x.values])), calcs: sib.mSpellCalculations ?? {} };
+        const n = tryCalcs(gg);
+        if (n) { calcName = n; gDmg = gg; break; }
       }
     }
+    if (calcName) {
+      const e = (rank, o = {}) => evalCalc(gDmg, calcName, rank, { ...Z, ...o });
+      base = e(1); perLvl = (e(ranks) - e(1)) / (ranks - 1);
+      apR = (e(1, { ap: 100 }) - base) / 100; adR = (e(1, { ad: 100, bonusAd: 100 }) - base) / 100;
+      if (!isFinite(base) || base > 3000) base = perLvl = 0;
+      if (!isFinite(apR) || apR > 5) apR = 0;
+      if (!isFinite(adR) || adR > 5) adR = 0;
+      if (adR > 2) adR = 1.2;
+      if (perLvl < 0) perLvl = 0;
+    }
     const dv = (re) => { if (!g) return 0; const k = Object.keys(g.DataValues).find((n) => re.test(n)); return k && g.DataValues[k] ? (g.DataValues[k][1] ?? 0) : 0; };
-    const range = Math.min(s.range[0] > 1 ? s.range[0] : 0, 5000);
-    const speed = raw?.missileSpeed || 0;
-    const width = raw?.mLineWidth || 0;
-    const radius = (raw?.castRadius?.[1] ?? raw?.castRadius?.[0] ?? 0) || dv(/^(radius|aoeradius|hitradius)/i);
+    // multi-form spells (Hwei, Jayce, Elise, Nidalee...) list no range on the parent: borrow the first sub-spell that has one
+    let tRaw = raw;
+    let range = Math.min(s.range[0] > 1 ? s.range[0] : 0, 5000);
+    const aimedSubs = siblings(s.id).filter((x) => x !== raw && (x.castRange?.[1] ?? 0) > 1 && x.mTargetingTypeData && !/Self/.test(x.mTargetingTypeData.__type));
+    if (range <= 1 && (!raw?.mTargetingTypeData || (/Self/.test(raw.mTargetingTypeData.__type) && aimedSubs.length >= 2))) {
+      const sub = siblings(s.id).find((x) => x !== raw && (x.castRange?.[1] ?? x.castRange?.[0] ?? 0) > 1 && x.mTargetingTypeData && !/Self/.test(x.mTargetingTypeData.__type));
+      if (sub) { tRaw = sub; range = Math.min(sub.castRange[1] ?? sub.castRange[0], 5000); }
+    }
+    const speed = tRaw?.missileSpeed || 0;
+    const width = tRaw?.mLineWidth || 0;
+    const radius = (tRaw?.castRadius?.[1] ?? tRaw?.castRadius?.[0] ?? 0) || dv(/^(radius|aoeradius|hitradius)/i);
     const lower = text.toLowerCase();
     // targeting data straight from the client: what the in-game indicator draws
-    const tt = raw?.mTargetingTypeData?.__type ?? '';
-    const tg = raw?.mClientData?.mTargeterDefinitions ?? [];
+    const tt = tRaw?.mTargetingTypeData?.__type ?? '';
+    const tg = tRaw?.mClientData?.mTargeterDefinitions ?? [];
     const lv = (f) => (f && typeof f === 'object' ? (f.mPerLevelValues?.[1] ?? f.mPerLevelValues?.[0] ?? 0) : typeof f === 'number' ? f : 0);
     const lineT = tg.find((x) => /Line/.test(x.__type));
     const aoeT = tg.find((x) => /Aoe/.test(x.__type));

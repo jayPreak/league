@@ -1203,6 +1203,16 @@ function announceKill(killer: Unit, t: Unit, first: boolean) {
   feedMsg(`${killer.name}${killer === G.player ? ' (you)' : ''} slew ${t.name}${t === G.player ? ' (you)' : ''}`, killer.team);
 }
 
+// League's death timer: base respawn wait by level, stretched by the time-impact factor after 15:00 (capped at +50%)
+const BRW = [10, 10, 12, 12, 14, 16, 20, 25, 28, 32.5, 35, 37.5, 40, 42.5, 45, 47.5, 50, 52.5];
+function deathTimer(level: number, t: number): number {
+  const m = t / 60;
+  let tif = 0;
+  if (m >= 15) tif = Math.ceil(2 * (Math.min(m, 30) - 15)) * 0.00425;
+  if (m >= 30) tif += Math.ceil(2 * (Math.min(m, 45) - 30)) * 0.003;
+  if (m >= 45) tif += Math.ceil(2 * (Math.min(m, 55) - 45)) * 0.0145;
+  return BRW[Math.max(0, Math.min(17, level - 1))] * (1 + Math.min(0.5, tif));
+}
 function kill(t: Unit, src: Unit) {
   t.dead = true;
   t.shield = t.shieldT = t.rootT = t.stealthT = t.airT = 0;
@@ -1247,7 +1257,7 @@ function kill(t: Unit, src: Unit) {
   } else if (t.champ) {
     const c = t.champ;
     c.deaths++;
-    c.respawnT = 8 + c.level * 2.5;
+    c.respawnT = deathTimer(c.level, G.t);
     c.order = null;
     c.dash = null;
     c.buffs = [];
