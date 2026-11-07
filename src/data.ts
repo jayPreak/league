@@ -121,6 +121,14 @@ export interface ItemDef {
   ms?: number;
   haste?: number;
   ls?: number;
+  crit?: number; // critical strike chance, 0..1
+  critDmg?: number; // bonus critical strike damage (Infinity Edge)
+  leth?: number; // lethality: flat armor penetration (full value at every level since V14.1)
+  apen?: number; // % armor penetration
+  mpen?: number; // flat magic penetration
+  mpenPct?: number; // % magic penetration
+  omni?: number; // omnivamp
+  stack?: number; // consumables: how many fit in the bag
   unique?: boolean;
   consumable?: boolean; // bought into a counter instead of an inventory slot
   mp?: number;

@@ -169,13 +169,26 @@ writeFileSync('src/champions/index.json', JSON.stringify(out.map((c) => ({ id: c
 console.log('champions', out.length, 'generic', generic.length, 'ver', ver);
 
 // ---------- items ----------
+// Stats Data Dragon only lists in the tooltip's <stats> block (not in v.stats): crit damage, lethality,
+// armor/magic penetration and omnivamp. Parsed from <stats> only so passive text can't leak in.
+function statExtras(html) {
+  const m = /<stats>([\s\S]*?)<\/stats>/.exec(html ?? '');
+  const t = (m ? m[1] : '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const num = (re) => { const r = re.exec(t); return r ? Number(r[1]) : undefined; };
+  const pct = (re) => { const v = num(re); return v === undefined ? undefined : v / 100; };
+  const x = {
+    critDmg: pct(/([\d.]+)% Critical Strike Damage/), leth: num(/([\d.]+) Lethality/), apen: pct(/([\d.]+)% Armor Penetration/),
+    mpen: num(/([\d.]+) Magic Penetration/), mpenPct: pct(/([\d.]+)% Magic Penetration/), omni: pct(/([\d.]+)% Omnivamp/),
+  };
+  return Object.fromEntries(Object.entries(x).filter(([, v]) => v !== undefined));
+}
 const it = (await get(dd('data/en_US/item.json'))).data;
 const items = [];
 for (const [id, v] of Object.entries(it)) {
   if (!v.gold?.purchasable || !v.maps?.['11'] || v.requiredChampion || v.requiredAlly || v.hideFromAll || v.inStore === false) continue;
   if (v.tags?.includes('Trinket') && id !== '3340') continue;
   if (v.consumed && !['2003', '2031', '2055'].includes(id)) continue;
-  items.push({ id, name: v.name, cost: v.gold.total, base: v.gold.base, sell: v.gold.sell, from: v.from ?? [], into: v.into ?? [], tags: v.tags ?? [], stats: v.stats, desc: plain(v.description), depth: v.depth ?? 1 });
+  items.push({ id, name: v.name, cost: v.gold.total, base: v.gold.base, sell: v.gold.sell, from: v.from ?? [], into: v.into ?? [], tags: v.tags ?? [], stats: v.stats, extra: statExtras(v.description), stack: v.stacks, desc: plain(v.description), depth: v.depth ?? 1 });
 }
 writeFileSync('src/items.json', JSON.stringify(items));
 console.log('items', items.length);

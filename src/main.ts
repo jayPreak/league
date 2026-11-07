@@ -1,5 +1,5 @@
 import './style.css';
-import { quote, iconUrl } from './items';
+import { quote, iconUrl, ITEM_FX, HEALTH_POTION, POTION, STARTERS, starterFor } from './items';
 import { openDraft } from './draft';
 import { SUMS, byLevel, defaultSums, fixSums, mountSumPicker, parseSums, sumIcon } from './summoners';
 import type { SumId, SumPair } from './summoners';
@@ -78,6 +78,7 @@ interface Buff {
   as: number;
   ms: number;
   t: number;
+  tag?: string; // item buffs that refresh as a group (Rageblade stacks, Quicken, Fervor)
 }
 interface Dash {
   tx: number;
@@ -126,6 +127,8 @@ interface Champ {
   emberT: number;
   wards: number; // trinket charges
   pinks: number; // Control Wards in the bag
+  pots: number; // Health Potions in the bag
+  ix: ItemStats; // item stats beyond the flat ones (recalc)
   wardCd: number;
   st: Record<string, any>; // per-kit state (stacks, timers, recast data)
   rc: number[]; // recast windows per slot (seconds left)
@@ -133,6 +136,11 @@ interface Champ {
   itemLog: [number, string][]; // [game second, item id] purchases
   runes: RunePage;
 }
+interface ItemStats {
+  crit: number; critDmg: number; leth: number; apen: number; mpen: number; mpenPct: number; omni: number; has: Set<string>;
+}
+const noItemStats = (): ItemStats => ({ crit: 0, critDmg: 0, leth: 0, apen: 0, mpen: 0, mpenPct: 0, omni: 0, has: new Set() });
+const CRIT_BASE = 1.75; // League: critical strikes deal 175% damage
 export interface MatchStats {
   pc: number; mc: number; tc: number; // damage to champions by type
   obj: number; mon: number; taken: number; healed: number; gold: number; wards: number; ctrl: number; firstDeath: number;
@@ -262,6 +270,7 @@ interface Proj {
   team: Side;
   dmg: number;
   dmgType: DmgType;
+  crit?: boolean; // basic attack that rolled a critical strike
   pierce: boolean;
   hit: Set<Unit>;
   slow: number;
@@ -524,8 +533,19 @@ function recalc(u: Unit) {
   let haste = 0;
   let ls = 0;
   let itemMp = 0;
+  const ix = noItemStats();
+  let apenKeep = 1;
+  let mpenKeep = 1;
   for (const id of c.items) {
     const it = ITEM_MAP[id];
+    ix.has.add(id);
+    ix.crit += it.crit ?? 0;
+    ix.critDmg += it.critDmg ?? 0;
+    ix.leth += it.leth ?? 0;
+    ix.mpen += it.mpen ?? 0;
+    ix.omni += it.omni ?? 0;
+    apenKeep *= 1 - (it.apen ?? 0); // percent penetration stacks multiplicatively
+    mpenKeep *= 1 - (it.mpenPct ?? 0);
     itemMp += it.mp ?? 0;
     hp += it.hp ?? 0;
     ad += it.ad ?? 0;
@@ -561,8 +581,12 @@ function recalc(u: Unit) {
   const old = u.maxHp;
   u.maxHp = hp;
   u.hp = old > 0 ? Math.min(hp, u.hp + Math.max(0, hp - old)) : hp;
+  ix.crit = Math.min(1, ix.crit);
+  ix.apen = 1 - apenKeep;
+  ix.mpenPct = 1 - mpenKeep;
+  c.ix = ix;
   u.ad = ad;
-  u.ap = ap;
+  u.ap = ap * (1 + (ix.has.has('3089') ? ITEM_FX['3089'].apAmp : 0)); // Rabadon's Deathcap: Magical Opus
   u.armor = armor;
   u.mr = mr;
   u.as = d.as * (1 + asBonus);
@@ -619,6 +643,8 @@ function makeChamp(def: ChampDef, team: Team, role: Role, isPlayer: boolean): Un
     emberT: 0,
     wards: 2,
     pinks: 0,
+    pots: 0,
+    ix: noItemStats(),
     wardCd: 0,
     st: {},
     rc: [0, 0, 0, 0],
@@ -1010,7 +1036,19 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   if (t.champ) amt = KITS[t.champ.def.id]?.passive?.onTaken?.(t, src, amt, type) ?? amt;
   let res = type === 'phys' ? t.armor : type === 'magic' ? t.mr : 0;
   if (type === 'phys' && t.shredT > 0) res *= 1 - t.shredPct;
+  if (type === 'phys' && t.marks.bc) res *= 1 - ITEM_FX['3071'].shred * t.marks.bc.v; // Black Cleaver: Carve
   if (type === 'phys' && src.champ) res *= 1 - (KITS[src.champ.def.id]?.passive?.armorPen?.(src, t) ?? 0);
+  // item penetration, League order: % reduction above, then % penetration, then flat (lethality / magic pen)
+  const ix = src.champ?.ix;
+  if (ix && res > 0) {
+    if (type === 'phys') res = Math.max(0, res * (1 - ix.apen) - ix.leth);
+    else if (type === 'magic') res = Math.max(0, res * (1 - ix.mpenPct) - ix.mpen);
+  }
+  // Lord Dominik's Regards: Giant Slayer, up to +15% against champions with 1500 bonus Health
+  if (ix?.has.has('3036') && t.champ) {
+    const fx = ITEM_FX['3036'];
+    amt *= 1 + fx.maxAmp * clamp((t.maxHp - (t.champ.st.baseHp ?? t.maxHp)) / fx.maxHp, 0, 1);
+  }
   if (t.drT > 0) amt *= 1 - t.drPct;
   if (src.marks.exh && type !== 'true') amt *= 1 - src.marks.exh.v; // Exhaust: less damage dealt
   if (t.marks.pta && t.marks.pta.t > 0) amt *= 1 + t.marks.pta.v;
@@ -1025,6 +1063,8 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   const dmg = amt * mult * (100 / (100 + Math.max(0, res)));
   if (src.champ && dmg > 0) KITS[src.champ.def.id]?.passive?.onDealt?.(src, t, dmg, type, from);
   if (src.champ && dmg > 0) runeOnDeal(src, t, dmg, type, from);
+  if (src.champ && dmg > 0 && t.team !== src.team && t.kind !== 'ward') itemOnDeal(src, t, dmg, type);
+  if (t.champ && src.champ && dmg > 0 && t.champ.ix.has.has('1054')) t.champ.st.dsT = G.t + ITEM_FX['1054'].dur; // Doran's Shield: Enduring Focus
   if (dmg > 0 && from !== 'dot') {
     // Molten Shield: attackers are burned
     const rf = t.marks.reflect;
@@ -1051,6 +1091,8 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   t.hp -= dmg - soak;
   if (t.kind === 'monster' && src.kind === 'champ') monsterAggro(t, src);
   if (t.plates > 0 && src.champ) checkPlates(t);
+  // The Collector: Death executes champions below 5% Health
+  if (t.champ && t.hp > 0 && src.champ?.ix.has.has('6676') && t.hp < t.maxHp * ITEM_FX['6676'].exec) t.hp = 0;
   t.hitFlash = 0.12;
   if (t.kind === 'champ' || t.kind === 'minion') t.pop = Math.min(1, t.pop + (dmg > 40 ? 1 : 0.6));
   if (dmg > 4) {
@@ -1081,8 +1123,10 @@ function dealDamage(src: Unit, t: Unit, amt: number, type: DmgType, from: DmgFro
   for (const v of [P, ...remoteUnits()]) {
     if ((src !== v && t !== v) || dmg < 1) continue;
     const col = t === v ? '#ff6b6b' : type === 'magic' ? '#c69bff' : type === 'true' ? '#ffffff' : '#ffd27a';
-    const size = t.kind === 'champ' ? 17 : 13;
-    if (v === P) local(() => addText(t.x, t.y - t.r - 14, String(Math.round(dmg)), col, size));
+    const crit = critNow && src === v && from === 'attack';
+    const size = (t.kind === 'champ' ? 17 : 13) + (crit ? 6 : 0);
+    const txt = crit ? `${Math.round(dmg)}!` : String(Math.round(dmg));
+    if (v === P) local(() => addText(t.x, t.y - t.r - 14, txt, crit && t !== v ? '#ff9a3c' : col, size));
     else if (relaying()) evq.push(['tv', v.id, r1(t.x), r1(t.y - t.r - 14), String(Math.round(dmg)), col, size]);
   }
   if (t.hp <= 0) kill(t, src);
@@ -1274,6 +1318,7 @@ function kill(t: Unit, src: Unit) {
       killer.champ!.kills++;
       G.kills[killer.team as Team]++;
       giveGold(killer, 300);
+      if (killer.champ!.ix.has.has('6676')) giveGold(killer, ITEM_FX['6676'].gold); // The Collector: Taxes
       for (const [d, time] of c.damagers) {
         if (d !== killer && G.t - time < 10) {
           d.champ!.assists++;
@@ -1335,6 +1380,15 @@ function performAttack(u: Unit, t: Unit) {
     u.heat = Math.min(1.2, u.heat + 0.4); // turret warm-up: +40% per consecutive shot on a champion
   } else if (u.kind === 'tower') u.heat = 0;
   if (u.kind === 'monster' && !!t.champ && hasSum(t.champ, 'smite')) dmg *= 0.55; // and take less from monsters
+  let crit = false;
+  if (u.champ && t.kind !== 'ward') {
+    const ix = u.champ.ix;
+    if (ix.crit > 0 && Math.random() < ix.crit) {
+      crit = true;
+      dmg *= CRIT_BASE + ix.critDmg; // Infinity Edge adds +30%
+    }
+    if (t.kind === 'minion' && (ix.has.has('1054') || ix.has.has('1056'))) dmg += ITEM_FX['1054'].minion; // Doran's: Helping Hand
+  }
   const ang = Math.atan2(t.y - u.y, t.x - u.x);
   u.lunge = 1;
   u.revealT = 1.2;
@@ -1363,6 +1417,7 @@ function performAttack(u: Unit, t: Unit) {
       team: u.team,
       dmg,
       dmgType: type,
+      crit,
       pierce: false,
       hit: new Set(),
       slow: 0,
@@ -1372,13 +1427,17 @@ function performAttack(u: Unit, t: Unit) {
       color: u.kind === 'tower' ? (u.team ? '#ff8a6b' : '#7fc1ff') : u.champ ? u.champ.def.color : TEAM_COLOR[u.team],
       done: false,
     });
-  } else applyAuto(u, t, dmg, type);
+  } else applyAuto(u, t, dmg, type, crit);
 }
 
-function applyAuto(u: Unit, t: Unit, dmg: number, type: DmgType) {
+let critNow = false; // the basic attack being applied is a critical strike (bigger damage number)
+function applyAuto(u: Unit, t: Unit, dmg: number, type: DmgType, crit = false) {
   const emp = u.champ?.empower;
+  critNow = crit;
   const done = dealDamage(u, t, dmg, type, 'attack');
+  critNow = false;
   if (u.champ) KITS[u.champ.def.id]?.passive?.onAttack?.(u, t, done);
+  if (u.champ && !u.dead) itemOnHit(u, t);
   // Ember blessing: attacks burn and slow
   if (u.champ && u.champ.emberT > 0 && !t.dead && (t.kind === 'champ' || t.kind === 'monster' || t.kind === 'minion')) {
     dealDamage(u, t, 8 + 2 * u.champ.level, 'true');
@@ -1393,7 +1452,113 @@ function applyAuto(u: Unit, t: Unit, dmg: number, type: DmgType) {
       burst(t.x, t.y, 12, { kind: 'ember', color: emp.a.color, speed: 320, life: 0.35, size: 4, drag: 5 });
     }
   }
-  if (u.champ && u.champ.ls > 0 && !u.dead) heal(u, done * u.champ.ls);
+  if (u.champ && u.champ.ls > 0 && !u.dead) {
+    const amt = done * u.champ.ls;
+    const excess = Math.max(0, u.hp + amt * (u.marks.gw ? 1 - u.marks.gw.v : 1) - u.maxHp);
+    heal(u, amt);
+    // Bloodthirster: Ichorshield turns excess life steal into a shield (165, +15 per level from 9)
+    if (excess > 0 && u.champ.ix.has.has('3072')) {
+      const fx = ITEM_FX['3072'];
+      const cap = fx.shield + fx.perLvl * Math.max(0, u.champ.level - fx.fromLvl + 1);
+      u.shield = Math.min(Math.max(u.shield, cap), u.shield + excess);
+      u.shieldT = Math.max(u.shieldT, 25);
+    }
+  }
+}
+
+// ---------- item passives (values in ITEM_FX, src/items.ts, from CommunityDragon 16.22) ----------
+function itemBuff(c: Champ, tag: string, b: Omit<Buff, 'tag'>, max = 1) {
+  const mine = c.buffs.filter((x) => x.tag === tag);
+  for (const x of mine) x.t = b.t; // stacks refresh together
+  if (mine.length < max) c.buffs.push({ ...b, tag });
+}
+function spellbladeArm(u: Unit) {
+  const c = u.champ!;
+  if (!['3078', '3100', '3508', '3057'].some((id) => c.ix.has.has(id)) || G.t < (c.st.sbCd ?? 0)) return;
+  c.st.sbReady = G.t + 10;
+}
+function itemOnHit(u: Unit, t: Unit) {
+  const c = u.champ!;
+  const has = c.ix.has;
+  if (!has.size || t.kind === 'ward' || t.team === u.team) return;
+  const struct = t.kind === 'tower' || t.kind === 'nexus';
+  const ranged = c.def.ranged;
+  // Spellblade: the attack after an ability (Sheen, Trinity Force, Lich Bane, Essence Reaver)
+  if ((c.st.sbReady ?? 0) > G.t) {
+    const id = ['3078', '3100', '3508', '3057'].find((x) => has.has(x));
+    if (id) {
+      const fx = ITEM_FX[id];
+      c.st.sbReady = 0;
+      c.st.sbCd = G.t + fx.cd;
+      const base = (c.st.baseAd ?? u.ad) * fx.adBase;
+      if (id === '3100') dealDamage(u, t, base + fx.ap * u.ap, 'magic', 'dot');
+      else dealDamage(u, t, base, 'phys', 'dot');
+      if (id === '3508') u.mp = Math.min(u.maxMp, u.mp + fx.manaFlat + fx.manaMissing * (u.maxMp - u.mp));
+      if (onScreen(t)) ring(t.x, t.y, t.r + 24, id === '3100' ? '#b48cff' : '#ffd27a', 0.25, 6);
+    }
+  }
+  if (has.has('3078')) itemBuff(c, 'quicken', { as: 0, ms: ITEM_FX['3078'].msFlat / Math.max(1, u.ms), t: ITEM_FX['3078'].msT });
+  if (has.has('3124')) {
+    const fx = ITEM_FX['3124'];
+    itemBuff(c, 'rage', { as: fx.asStack, ms: 0, t: fx.dur }, fx.max);
+  }
+  if (struct || t.dead) return;
+  if (has.has('3124')) dealDamage(u, t, ITEM_FX['3124'].onHit, 'magic', 'dot');
+  if (has.has('3091')) dealDamage(u, t, ITEM_FX['3091'].onHit, 'magic', 'dot');
+  if (has.has('3115')) dealDamage(u, t, ITEM_FX['3115'].base + ITEM_FX['3115'].ap * u.ap, 'magic', 'dot');
+  if (has.has('3153') && !t.dead) {
+    const fx = ITEM_FX['3153'];
+    let d = t.hp * (ranged ? fx.ranged : fx.melee);
+    if (!t.champ) d = Math.min(d, fx.monCap);
+    dealDamage(u, t, d, 'phys', 'dot');
+    if (t.champ && !t.dead) {
+      const m = t.marks.brk?.src === u ? t.marks.brk : (t.marks.brk = { t: 6, v: 0, src: u });
+      m.t = 6;
+      if (++m.v >= fx.hits) {
+        delete t.marks.brk;
+        t.slowAmt = Math.max(t.slowT > 0 ? t.slowAmt : 0, fx.slow);
+        t.slowT = Math.max(t.slowT, fx.slowT);
+      }
+    }
+  }
+  if (has.has('6672') && !t.dead) {
+    const fx = ITEM_FX['6672'];
+    c.st.krN = (c.st.krN ?? 0) + 1;
+    if (c.st.krN % fx.every === 0) {
+      const base = (fx.base + fx.perLvl * Math.max(0, c.level - fx.fromLvl + 1)) * (ranged ? fx.rangedMul : 1);
+      dealDamage(u, t, base * (1 + fx.amp * (1 - t.hp / t.maxHp)), 'phys', 'dot');
+      if (onScreen(t)) ring(t.x, t.y, t.r + 20, '#7fe0ff', 0.25, 6);
+    }
+  }
+}
+// "dealing damage" item passives: Black Cleaver, Mortal Reminder, omnivamp, Doran's Ring
+function itemOnDeal(src: Unit, t: Unit, dmg: number, type: DmgType) {
+  const c = src.champ!;
+  const has = c.ix.has;
+  if (c.ix.omni > 0 && !src.dead) heal(src, dmg * c.ix.omni);
+  if (!t.champ) return;
+  if (has.has('1056')) c.st.drUp = G.t + ITEM_FX['1056'].upT;
+  if (type !== 'phys') return;
+  if (has.has('3071')) {
+    const fx = ITEM_FX['3071'];
+    const m = t.marks.bc ?? (t.marks.bc = { t: fx.dur, v: 0, src });
+    m.t = fx.dur;
+    m.v = Math.min(fx.max, m.v + 1);
+    itemBuff(c, 'fervor', { as: 0, ms: fx.msFlat / Math.max(1, src.ms), t: fx.msT });
+  }
+  if (has.has('3033')) {
+    const fx = ITEM_FX['3033'];
+    const gw = t.marks.gw;
+    t.marks.gw = { t: Math.max(gw?.t ?? 0, fx.gwT), v: Math.max(gw?.v ?? 0, fx.gw), src };
+  }
+}
+function usePotion(u: Unit): boolean {
+  const c = u.champ!;
+  if (u.dead || c.pots <= 0 || (c.st.potT ?? 0) > G.t || u.hp >= u.maxHp) return false;
+  c.pots--;
+  c.st.potT = G.t + POTION.dur;
+  if (u === G.player) sfx('buff', u, 0.6);
+  return true;
 }
 
 function tryAttack(u: Unit, t: Unit) {
@@ -1552,6 +1717,7 @@ function castKit(u: Unit, slot: number, tx: number, ty: number): boolean {
   u.stealthT = 0; // casting breaks camouflage; kits that grant it set it again
   const res = handler({ u, c, slot, rank, a, tx, ty, nx: dx / d, ny: dy / d, d, recast });
   if (res === false) return false; // handler refused (no valid target): nothing spent
+  spellbladeArm(u);
   if (!recast && !(res && (res as any).free)) {
     u.mp -= costOf(c, slot);
     u.revealT = 1.2;
@@ -1581,6 +1747,7 @@ function cast(u: Unit, slot: number, tx: number, ty: number): boolean {
   if (u.dead || u.stunT > 0 || c.cds[slot] > 0 || c.dash) return false;
   if (c.ranks[slot] === 0 || u.mp < a.cost) return false;
   u.mp -= a.cost;
+  spellbladeArm(u);
   u.revealT = 1.2;
   if (!a.stealth) u.stealthT = 0;
   c.recallT = 0;
@@ -2337,6 +2504,21 @@ function updateChamp(u: Unit, dt: number) {
   // Azure blessing: much faster mana regeneration (and ability haste, see cdOf)
   u.mp = Math.min(u.maxMp, u.mp + (c.def.mpRegen + (c.def.mpRegenL ?? 0) * (c.level - 1) + (c.azureT > 0 ? u.maxMp * 0.01 : 0)) * dt);
   if (c.def.hpRegen) heal(u, ((c.def.hpRegen + (c.def.hpRegenL ?? 0) * (c.level - 1)) / 5) * dt);
+  if ((c.st.potT ?? 0) > G.t) heal(u, (POTION.heal / POTION.dur) * dt); // Health Potion
+  if (c.ix.has.has('1056')) {
+    // Doran's Ring: Drain, 1 mana/s (2 for 5s after hitting a champion); heals 45% of that without mana
+    const fx = ITEM_FX['1056'];
+    const r = ((c.st.drUp ?? 0) > G.t ? fx.manaUp : fx.mana) * dt;
+    if (u.maxMp > 0) u.mp = Math.min(u.maxMp, u.mp + r);
+    else heal(u, r * fx.toHp);
+  }
+  if (c.ix.has.has('1054')) {
+    // Doran's Shield: 4 Health per 5s, plus up to 40 (30 ranged) over 8s after champion damage, scaled by missing Health
+    const fx = ITEM_FX['1054'];
+    heal(u, (fx.hp5 / 5) * dt);
+    if ((c.st.dsT ?? 0) > G.t) heal(u, ((c.def.ranged ? fx.maxRanged : fx.max) * (1 - u.hp / u.maxHp) / fx.dur) * dt);
+  }
+  if (!c.isPlayer && c.pots > 0 && u.hp < u.maxHp * 0.6 && u.maxHp - u.hp > POTION.heal && dist(u, BASES[u.team]) > FOUNTAIN_R + 200) usePotion(u);
   for (let i = 0; i < 4; i++)
     if (c.rc[i] > 0 && (c.rc[i] -= dt) <= 0) {
       c.rc[i] = 0;
@@ -2446,6 +2628,22 @@ function runOrder(u: Unit, dt: number) {
 
 function aiShop(u: Unit) {
   const c = u.champ!;
+  // opening buy, as in League: a Doran's item and Health Potions (junglers: potion only, no pets in this shop)
+  if (!c.st.opened && G.t < 120) {
+    c.st.opened = true;
+    if (!c.items.length) {
+      const s = starterFor(c.def.tags ?? [], !!c.def.ranged);
+      if (c.role !== 'jungle') buyItem(u, s.item);
+      for (let i = 0; i < (c.role === 'jungle' ? 1 : s.pots); i++) buyItem(u, HEALTH_POTION.id);
+    }
+  }
+  // a full inventory sells its starter to make room (Data Dragon sell value: 40%)
+  const st = c.items.findIndex((x) => STARTERS.has(x));
+  if (st >= 0 && c.items.length >= 6 && c.buildIdx < c.def.build.length) {
+    c.gold += Math.round(ITEM_MAP[c.items[st]].cost * 0.4);
+    c.items.splice(st, 1);
+    recalc(u);
+  }
   let guard = 12;
   while (c.buildIdx < c.def.build.length && guard-- > 0) {
     const target = c.def.build[c.buildIdx];
@@ -2459,10 +2657,19 @@ function aiShop(u: Unit) {
       c.buildIdx++;
       continue;
     }
-    // can't afford the whole item: buy the most expensive affordable component, like a player would
+    // can't afford the whole item: buy the most expensive affordable component still missing, like a player would
+    // (components already in the bag count toward the recipe, so they aren't bought twice)
+    const used = new Set<number>();
     const comps = (function walk(id: string): string[] {
       const it = ITEM_MAP[id];
-      return (it?.from ?? []).flatMap((f) => [f, ...walk(f)]);
+      return (it?.from ?? []).flatMap((f) => {
+        const idx = c.items.findIndex((x, i) => x === f && !used.has(i));
+        if (idx >= 0) {
+          used.add(idx);
+          return [];
+        }
+        return [f, ...walk(f)];
+      });
     })(target)
       .filter((f) => ITEM_MAP[f] && canBuy(u, f))
       .sort((x, y) => ITEM_MAP[y].cost - ITEM_MAP[x].cost);
@@ -3252,7 +3459,7 @@ function update(dt: number) {
       const d = dist(p, t);
       if (d <= step + t.r * 0.5) {
         if (p.cb) p.cb(t, p);
-        else applyAuto(p.owner, t, p.dmg, p.dmgType);
+        else applyAuto(p.owner, t, p.dmg, p.dmgType, !!p.crit);
         p.done = true;
       } else {
         p.x += ((t.x - p.x) / d) * step;
@@ -3984,6 +4191,13 @@ function buildHud() {
   wd.title = 'Trinket ward (4) — place a hidden ward at the cursor that reveals the area for 90s. 2 charges, 120s recharge.';
   wd.innerHTML = `<div class="ico" style="background:radial-gradient(circle at 35% 30%, #ffe27a, #111 85%)">Ward</div><div class="cd"></div><div class="cdt"></div><span class="key">4</span>`;
   ab.appendChild(wd);
+  const pd = document.createElement('div');
+  pd.className = 'slot spell';
+  pd.id = 'potslot';
+  pd.title = `${HEALTH_POTION.name} (1) — restores ${POTION.heal} Health over ${POTION.dur}s. Buy in the shop, up to ${HEALTH_POTION.stack}.`;
+  pd.innerHTML = `<div class="ico" style="background:#111 url(${iconUrl(HEALTH_POTION)}) center/cover"></div><div class="cd"></div><div class="cdt"></div><span class="key">1</span>`;
+  pd.addEventListener('click', () => command({ c: 'pot' }));
+  ab.appendChild(pd);
   paintPortrait();
   buildTouch();
   lastGold = c.gold;
@@ -4093,6 +4307,14 @@ function updateHud() {
     const cc = G.player.champ!;
     setText(ws.querySelector<HTMLElement>('.cdt')!, 'wardcdt', cc.wards > 0 ? `${cc.wards}` : `${Math.ceil(cc.wardCd)}`);
     ws.classList.toggle('down', cc.wards <= 0);
+  }
+  const ps = document.getElementById('potslot');
+  if (ps) {
+    const cc = G.player.champ!;
+    const left = Math.max(0, (cc.st.potT ?? 0) - G.t);
+    setText(ps.querySelector<HTMLElement>('.cdt')!, 'potcdt', `${cc.pots}`);
+    ps.querySelector<HTMLElement>('.cd')!.style.height = `${(left / POTION.dur) * 100}%`;
+    ps.classList.toggle('down', cc.pots <= 0);
   }
   slotEls.forEach((s, i) => {
     const v = all[i];
@@ -4205,7 +4427,7 @@ function canBuy(u: Unit, id: string): boolean {
   const c = u.champ!;
   const inShop = u.dead || dist(u, BASES[u.team]) < FOUNTAIN_R + 60;
   if (!it || !inShop) return false;
-  if (it.consumable) return c.gold >= it.cost && c.pinks < 2;
+  if (it.consumable) return c.gold >= it.cost && (id === HEALTH_POTION.id ? c.pots < (it.stack ?? 5) : c.pinks < 2);
   const q = quote(id, c.items, ITEM_MAP);
   if (c.gold < q.cost) return false;
   if (c.items.length - q.consumed.length >= 6) return false;
@@ -4222,7 +4444,8 @@ function buyItem(u: Unit, id: string) {
   const it = ITEM_MAP[id];
   if (it.consumable) {
     c.gold -= it.cost;
-    c.pinks++;
+    if (id === HEALTH_POTION.id) c.pots++;
+    else c.pinks++;
     return;
   }
   const q = quote(id, c.items, ITEM_MAP);
@@ -4357,6 +4580,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'd' || k === 'f') command({ c: 'sum', s: k === 'd' ? 0 : 1, x: w.x, y: w.y, id: hoverUnit(30)?.id });
   else if (k === '4') command({ c: 'ward', x: w.x, y: w.y });
   else if (k === '5') command({ c: 'ward', x: w.x, y: w.y, pink: true });
+  else if (k === '1') command({ c: 'pot' });
   else if (k === 'b') command({ c: 'recall' });
   else if (k === 's') command({ c: 'stop' });
 });
@@ -5023,6 +5247,9 @@ function applyCmd(u: Unit, cmd: Cmd) {
       break;
     case 'recall':
       startRecall(u);
+      break;
+    case 'pot':
+      if (!usePotion(u)) addText(u.x, u.y - 60, u.champ!.pots <= 0 ? 'No Health Potion' : u.hp >= u.maxHp ? 'Already at full health' : 'Potion active', '#aaa', 14);
       break;
     case 'stop':
       c.order = null;

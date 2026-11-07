@@ -50,8 +50,9 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
   (`src/costume.ts`): hair, ears, horns, tails, helmets, hoods, capes, wings, signature weapons. The 20 scripted champions have
   hand-built outfits; the other 153 get one generated from class, name hash and icon colours (main + accent), so they differ
   in silhouette and colour but are not likenesses. Icons are the real Data Dragon art.
-- **Items**: real SR shop with recipes (owned components are consumed and lower the price). Only HP, AD, AP, armor, MR,
-  attack speed, move speed, lifesteal, ability haste and mana are simulated; crit, on-hit and active effects are text only.
+- **Items**: real SR shop with recipes (owned components are consumed and lower the price). HP, AD, AP, armor, MR,
+  attack speed, move speed, lifesteal, ability haste, mana, crit, penetration and omnivamp are simulated, plus the item
+  passives listed in "Item effects" below; other passives and all actives are text only.
   Recommended builds are generated per class by scoring items against what the engine simulates (not Riot's builds).
 - **Runes**: all 5 trees selectable. Simulated: keystones Electrocute, Press the Attack, Phase Rush, Fleet Footwork, Grasp,
   Arcane Comet, Hail of Blades, Conqueror, Lethal Tempo, Dark Harvest, Glacial Augment, Aftershock (numbers simplified), plus
@@ -84,6 +85,64 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
 - Champion select and the main menu have a D/F picker (swaps when you pick the spell in the other slot). Role binding:
   junglers always carry Smite and nobody else may. Bots take Flash plus a role spell: jungle Smite, bottom Heal,
   top Teleport, mid Teleport (Ignite for assassins), support Exhaust for enchanters/mages, Ignite otherwise.
+
+## Item effects
+
+- **Stats beyond the flat ones**: crit chance comes from Data Dragon `FlatCritChanceMod`. Crit damage, lethality, % armor
+  penetration, flat / % magic penetration and omnivamp are only in the tooltip's `<stats>` block, so `scripts/build-all.mjs`
+  parses that block into `extra` in `src/items.json`. This round ran the parse alone against the cached 16.22.1 item.json
+  rather than a full rebuild.
+- **Crits**: basic attacks only. Base crit damage is 175%, and Infinity Edge adds +30% (CommunityDragon `mFlatCritDamageMod`).
+  Crit chance caps at 100%. Crits show as larger orange damage numbers with "!".
+  **Approximation**: each attack rolls plain random; League uses a pseudo-random distribution.
+- **Penetration** (League wiki, Armor penetration): applied in League's order: armor reduction (Black Cleaver, kit shreds),
+  then % penetration, then flat. Lethality is full flat armor penetration at every level (V14.1+). Several % penetration
+  items stack multiplicatively.
+- **Passives simulated**: values are in `ITEM_FX` (`src/items.ts`), read from CommunityDragon 16.22
+  `items.cdtb.bin.json` (`mDataValues` / `mItemCalculations`):
+  - Blade of the Ruined King: 9% (melee) / 6% (ranged) of current Health on-hit, capped at 100 against minions and monsters.
+    Every 3rd attack on a champion slows by 30% for 1s.
+  - Nashor's Tooth: 15 + 15% AP magic on-hit.
+  - Wit's End: 45 magic on-hit.
+  - Guinsoo's Rageblade: 30 magic on-hit, and 8% attack speed per stack (4 stacks, 4s).
+  - Kraken Slayer: every 3rd attack deals 150 (+5 per level from 9) physical, ×0.8 for ranged champions. The damage grows
+    by up to 75% based on the target's missing Health.
+  - Spellblade, on the next attack within 10s after an ability, 1.5s cooldown:
+    - Sheen: 100% base AD.
+    - Trinity Force: 200% base AD, plus Quicken (+20 move speed for 2s).
+    - Lich Bane: 75% base AD + 45% AP magic.
+    - Essence Reaver: 125% base AD, and restores 15 + 15% missing mana.
+  - The Collector: executes champions below 5% Health; +25 gold per champion kill.
+  - Black Cleaver: 6% armor reduction per stack, 5 stacks for 6s, from physical damage to champions, plus Fervor
+    (+20 move speed for 2s).
+  - Mortal Reminder: 40% Grievous Wounds for 3s from physical damage to champions.
+  - Lord Dominik's Regards: up to +15% damage against champions, scaled by their bonus Health up to 1500.
+  - Rabadon's Deathcap: +30% total AP.
+  - Bloodthirster: life steal past full Health becomes a shield, capped at 165 (+15 per level from 9), lasting 25s.
+  - Doran's Blade: 2.5% omnivamp.
+  - Doran's Ring and Doran's Shield: +5 damage to minions.
+  - Doran's Ring: 1 mana/s, raised to 2/s for 5s after damaging a champion; champions without mana heal 45% of that instead.
+  - Doran's Shield: 4 Health per 5s.
+- **Approximations** (not verifiable from the data):
+  - Essence Reaver: the `CritChanceMultiplier` term is left out, and the mana refund uses `FlatManaRefund`/`ManaRefundRatio`.
+  - Blade of the Ruined King: the ranged slow uses the tooltip's 30%, not the bin's `RangedMoveSpeedMod` of 15%.
+  - Doran's Shield: after champion damage it restores up to 40 Health (30 ranged) over 8s, scaled linearly by missing
+    Health (`MaxRegenAmount`; the exact curve is not published).
+  - Guinsoo's: stacks are refreshed together. The "every 3rd attack applies on-hit twice" part is not modelled.
+  - On-hit item damage does not apply to turrets; Spellblade does.
+  - Youmuu's, Terminus, Statikk Shiv, Runaan's, Rapid Firecannon and other passives, and all item actives, are not simulated.
+- **Health Potion** (Data Dragon 2003): 50 gold, up to 5, restores 120 Health over 15s (`HealAmount`/`PotionDuration`).
+  Press **1** or click the potion slot next to the ward. Only one potion can be active at a time.
+  **Difference from League**: potions sit in a separate counter, not an inventory slot.
+- **Starters**: bots open like League players:
+  - Doran's Blade + 1 potion for marksmen, fighters and assassins.
+  - Doran's Ring + 2 potions for mages.
+  - Doran's Shield + 1 potion for tanks and supports. League supports start World Atlas, which has no simulated stats here.
+  - Junglers buy 1 potion. Jungle pets are not in the shop; the jungle companion bonus still comes from Smite.
+  - Bots sell the Doran's item at 40% (Data Dragon sell value) when they need the slot.
+- **Bot builds**: when a bot can't afford its next item, it now buys only components still missing from the recipe.
+  Before, it bought the same component again and again (for example four Giant's Belts) and filled the inventory.
+  Build scoring now values crit, penetration and the simulated passives.
 
 ## HUD icons and Tab scoreboard
 
