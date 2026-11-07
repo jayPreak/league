@@ -85,6 +85,17 @@ This is a non-commercial fan project and is not endorsed by Riot Games.
   junglers always carry Smite and nobody else may. Bots take Flash plus a role spell: jungle Smite, bottom Heal,
   top Teleport, mid Teleport (Ignite for assassins), support Exhaust for enchanters/mages, Ignite otherwise.
 
+## HUD icons and Tab scoreboard
+
+- Ability bar (desktop and touch) uses the Data Dragon 16.22.1 art for each champion's passive and Q/W/E/R
+  (`img/passive/*`, `img/spell/*`), downloaded to `public/img/ability` by `scripts/build-all.mjs`; the file names per
+  champion are in `src/champions/icons.json` as `[passive, Q, W, E, R]`. Hand-written kits use the same slot order as
+  Data Dragon, so slot N always shows Data Dragon spell N. The passive sits left of Q, as in the League HUD.
+- Hold **Tab** (tap the K/D/A line on touch) for the scoreboard: per team kills, turrets, dragons and total gold earned;
+  per champion portrait with level and respawn timer, the two summoner spells, keystone, items plus trinket, K/D/A and CS.
+  **Differences from League**: there are no Baron/Herald/void-grub counts and no "item value" column. Enemy items are always
+  shown live, even when the enemy is in fog of war (not checked against League's rule). The trinket slot always shows the Stealth Ward.
+
 ## Full-game test (every champion)
 
 `scripts/full-game-test.mjs` (needs `npm run dev` on :5173, puppeteer-core and Chrome) plays one complete 5v5 bot match per

@@ -6,6 +6,7 @@ import type { SumId, SumPair } from './summoners';
 import { renderPost } from './postmatch';
 import type { PostData } from './postmatch';
 import { runeByKey, runeIcon } from './runes';
+import ABILITY_ICONS from './champions/icons.json';
 import { defaultPage, loadPage, pageStats } from './runes';
 import type { RunePage } from './runes';
 import {
@@ -3924,6 +3925,13 @@ function hoverUnit(pad = 14): Unit | null {
   return best;
 }
 
+// Data Dragon ability art: slot -1 is the passive, 0-3 are Q W E R ('' if the champion has none)
+const ICONS = ABILITY_ICONS as Record<string, string[]>;
+function abilityIcon(def: ChampDef, slot: number): string {
+  const f = ICONS[def.key ?? def.id]?.[slot + 1];
+  return f ? `${import.meta.env.BASE_URL}img/ability/${f}` : '';
+}
+
 const hudCache = new Map<string, string>();
 function setText(el: HTMLElement, key: string, v: string) {
   if (hudCache.get(key) === v) return;
@@ -3934,22 +3942,32 @@ let slotEls: { cd: HTMLElement; cdt: HTMLElement; root: HTMLElement; pips: HTMLE
 
 function buildHud() {
   hudCache.clear();
+  toggleBoard(false);
   const c = G.player.champ!;
   const ab = $('abilities');
   ab.innerHTML = '';
   slotEls = [];
   const keys = ['Q', 'W', 'E', 'R', 'D', 'F'];
   const defs = [
-    ...c.def.abilities.map((a) => ({ name: a.name, desc: a.desc, color: a.color, cd: a.cds ? a.cds.join('/') : a.cd, extra: abilityCostText(c.def, a) })),
+    ...c.def.abilities.map((a, i) => ({ name: a.name, desc: a.desc, color: a.color, cd: a.cds ? a.cds.join('/') : a.cd, extra: abilityCostText(c.def, a), icon: abilityIcon(c.def, i) })),
     ...c.sums.map((id) => ({ name: SUMS[id].name, desc: SUMS[id].desc, color: SUMS[id].color, cd: SUMS[id].cd, extra: '', icon: sumIcon(id) })),
   ];
+  // passive sits left of Q, like the League HUD
+  if (c.def.passive) {
+    const pi = abilityIcon(c.def, -1);
+    const pe = document.createElement('div');
+    pe.className = 'slot passive';
+    pe.title = `Passive, ${c.def.passive.name}: ${c.def.passive.desc}`;
+    pe.innerHTML = `<div class="ico" style="${pi ? `background:#111 url(${pi}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${c.def.color}, #111 85%)`}">${pi ? '' : 'P'}</div>`;
+    ab.appendChild(pe);
+  }
   defs.forEach((d, i) => {
     const el = document.createElement('div');
     el.className = 'slot' + (i > 3 ? ' spell' : '');
-    el.title = `${d.name} (${keys[i]}) — ${d.desc} Cooldown ${d.cd}s${d.extra}${i === 0 && c.def.passive ? `\nPassive, ${c.def.passive.name}: ${c.def.passive.desc}` : ''}`;
+    el.title = `${d.name} (${keys[i]}) — ${d.desc} Cooldown ${d.cd}s${d.extra}`;
     const cost = i < 4 ? costOf(c, i) : 0;
-    const icon = 'icon' in d ? d.icon : '';
-    el.innerHTML = `<div class="ico" style="${icon ? `background:#111 url(${icon}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)`}">${i > 3 ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>${
+    const icon = d.icon;
+    el.innerHTML = `<div class="ico" style="${icon ? `background:#111 url(${icon}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${d.color}, #111 85%)`}">${i > 3 || icon ? '' : d.name}</div><div class="cd"></div><div class="cdt"></div><span class="key">${keys[i]}</span>${
       i < 4 ? `<span class="mana">${cost}</span><div class="pips"></div><button class="plus" title="Learn (Ctrl+${keys[i]})">+</button>` : ''
     }`;
     if (i < 4)
@@ -3971,6 +3989,57 @@ function buildHud() {
   lastGold = c.gold;
   lastCd.clear();
 }
+
+// ---------- Tab scoreboard (League style: team totals on top, one row per champion) ----------
+let boardOpen = false;
+let boardAt = 0;
+function toggleBoard(on: boolean) {
+  if (boardOpen === on) return;
+  boardOpen = on;
+  $('board').classList.toggle('hidden', !on);
+  boardAt = 0;
+  if (on) renderBoard();
+}
+function renderBoard() {
+  const champs = G.units.filter((u) => u.champ && u.team < 2);
+  const towers: [number, number] = [0, 0];
+  for (const u of G.units) if (u.kind === 'tower' && u.dead && u.team < 2 && u.tier !== T_INHIB) towers[1 - u.team]++;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const fmtK = (g: number) => (g >= 1000 ? `${(g / 1000).toFixed(1)}k` : String(Math.round(g)));
+  const side = (team: Team) => {
+    const us = champs.filter((u) => u.team === team).sort((a, b) => ROLES.indexOf(a.champ!.role) - ROLES.indexOf(b.champ!.role));
+    const gold = us.reduce((s, u) => s + u.champ!.ms.gold, 0);
+    const rows = us
+      .map((u) => {
+        const c = u.champ!;
+        const ks = runeInfo(c.runes.keystone);
+        const items = Array.from({ length: 6 }, (_, i) => {
+          const it = c.items[i] ? ITEM_MAP[c.items[i]] : null;
+          return `<i title="${it?.name ?? ''}">${it ? itemImg(it) : ''}</i>`;
+        }).join('');
+        return `<div class="brow${u === G.player ? ' me' : ''}${u.dead ? ' dead' : ''}">
+<div class="bpic" style="background-image:url(${import.meta.env.BASE_URL}img/champ/${c.def.key ?? c.def.id}.png)">${u.dead ? `<span class="bres">${Math.ceil(c.respawnT)}</span>` : ''}<b>${c.level}</b></div>
+<div class="bsum">${c.sums.map((id) => `<img src="${sumIcon(id)}" alt="" title="${SUMS[id].name}">`).join('')}</div>
+<div class="bks">${ks ? `<img src="${runeIcon(ks.icon)}" alt="" title="${ks.name}">` : ''}</div>
+<div class="bname"><span>${u.name}</span>${u.name !== c.def.name ? `<small>${c.def.name}</small>` : ''}</div>
+<div class="bitems">${items}<i class="trk" title="Stealth Ward (${c.wards})"><img class="ico" src="${import.meta.env.BASE_URL}img/item/3340.png" alt="" draggable="false"></i></div>
+<div class="bkda">${c.kills} / ${c.deaths} / ${c.assists}</div>
+<div class="bcs">${c.cs}</div>
+</div>`;
+      })
+      .join('');
+    return `<div class="bteam t${team}"><div class="bhead"><span class="bname2">${TEAM_NAME[team]}</span><span>${plural(G.kills[team], 'kill')}</span><span>${plural(towers[team], 'turret')}</span><span>${plural(G.drakes[team], 'dragon')}</span><span class="bgold" title="Team gold">${fmtK(gold)} gold</span></div>${rows}</div>`;
+  };
+  const html = `<div class="btop"><span>${fmtTime(G.t)}</span><span class="bk"><b class="blue">${G.kills[0]}</b> vs <b class="red">${G.kills[1]}</b></span></div>${side(0)}${side(1)}`;
+  if (hudCache.get('board') !== html) {
+    hudCache.set('board', html);
+    $('board').innerHTML = html;
+  }
+}
+
+// touch: tap the K/D/A line to open the scoreboard, tap the board to close it
+$('mkda').addEventListener('click', () => toggleBoard(!boardOpen));
+$('board').addEventListener('click', () => toggleBoard(false));
 
 // Cooldown just finished: a one-shot glow so the player notices without looking.
 const lastCd = new Map<string, number>();
@@ -4001,6 +4070,10 @@ function updateHud() {
   const P = G.player;
   const c = P.champ!;
   setText($('clock'), 'clock', fmtTime(G.t));
+  if (boardOpen && performance.now() - boardAt > 250) {
+    boardAt = performance.now();
+    renderBoard();
+  }
   setText($('killsB'), 'kb', String(G.kills[0]));
   setText($('killsR'), 'kr', String(G.kills[1]));
   setText($('scoreline'), 'score', `${c.kills} / ${c.deaths} / ${c.assists}  ·  CS ${c.cs}`);
@@ -4246,6 +4319,10 @@ window.addEventListener('keydown', (e) => {
   const P = G.player;
   const c = P.champ!;
   const w = toWorld(mouse.x, mouse.y);
+  if (k === 'tab') {
+    e.preventDefault();
+    return toggleBoard(true);
+  }
   if (k === 'escape') return toggleShop(false);
   if (k === 'm') return toggleMute();
   if (k === 'p') return toggleShop();
@@ -4287,6 +4364,7 @@ window.addEventListener('keydown', (e) => {
 // Hold Q/W/E/R to preview range and area; release to cast at the cursor. Right-click cancels.
 let kbAim: number | null = null;
 window.addEventListener('keyup', (e) => {
+  if (e.key === 'Tab') toggleBoard(false);
   if (kbAim === null) return;
   const slot = ['q', 'w', 'e', 'r'].indexOf(e.key.toLowerCase());
   if (slot !== kbAim) return;
@@ -4296,7 +4374,10 @@ window.addEventListener('keyup', (e) => {
   command({ c: 'cast', s: slot, x: w.x, y: w.y });
 });
 window.addEventListener('contextmenu', () => (kbAim = null));
-window.addEventListener('blur', () => (kbAim = null));
+window.addEventListener('blur', () => {
+  kbAim = null;
+  if (running) toggleBoard(false);
+});
 
 function edgePan(dt: number) {
   if (G.camLocked || TOUCH) return;
@@ -4668,10 +4749,10 @@ function buildTouch() {
   const ab = G.player.champ!.def.abilities;
   touchBtns = [
     { id: 'atk', label: 'ATTACK', angle: 0, r: 0, size: 96, color: '#c8aa6e' },
-    { id: 'q', label: ab[0].name, angle: 180, r: 122, size: 62, color: ab[0].color },
-    { id: 'w', label: ab[1].name, angle: 140, r: 122, size: 62, color: ab[1].color },
-    { id: 'e', label: ab[2].name, angle: 100, r: 122, size: 62, color: ab[2].color },
-    { id: 'r', label: ab[3].name, angle: 148, r: 205, size: 68, color: ab[3].color },
+    { id: 'q', label: ab[0].name, angle: 180, r: 122, size: 62, color: ab[0].color, icon: abilityIcon(G.player.champ!.def, 0) },
+    { id: 'w', label: ab[1].name, angle: 140, r: 122, size: 62, color: ab[1].color, icon: abilityIcon(G.player.champ!.def, 1) },
+    { id: 'e', label: ab[2].name, angle: 100, r: 122, size: 62, color: ab[2].color, icon: abilityIcon(G.player.champ!.def, 2) },
+    { id: 'r', label: ab[3].name, angle: 148, r: 205, size: 68, color: ab[3].color, icon: abilityIcon(G.player.champ!.def, 3) },
     { id: 'd', label: SUMS[G.player.champ!.sums[0]].name, angle: 102, r: 205, size: 48, color: SUMS[G.player.champ!.sums[0]].color, icon: sumIcon(G.player.champ!.sums[0]) },
     { id: 'f', label: SUMS[G.player.champ!.sums[1]].name, angle: 72, r: 200, size: 48, color: SUMS[G.player.champ!.sums[1]].color, icon: sumIcon(G.player.champ!.sums[1]) },
     { id: 'minion', label: 'Minion', angle: 222, r: 100, size: 42, color: '#8fa3b8' },
@@ -4681,7 +4762,7 @@ function buildTouch() {
     const el = document.createElement('div');
     el.className = `tbtn tb-${b.id}`;
     const rs = ['q', 'w', 'e', 'r'].indexOf(b.id);
-    el.innerHTML = `<div class="ico" style="${b.icon ? `background:#111 url(${b.icon}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)`}"></div><span class="lbl">${b.label}</span><div class="cd"></div><div class="cdt"></div>${
+    el.innerHTML = `<div class="ico" style="${b.icon ? `background:#111 url(${b.icon}) center/cover` : `background:radial-gradient(circle at 35% 30%, ${b.color}, #111 85%)`}"></div><span class="lbl">${b.icon ? '' : b.label}</span><div class="cd"></div><div class="cdt"></div>${
       rs >= 0 ? '<div class="tplus">+</div>' : ''
     }`;
     if (rs >= 0)

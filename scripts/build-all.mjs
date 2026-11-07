@@ -194,3 +194,16 @@ mkdirSync('public/img/spell', { recursive: true });
 const sids = Object.values(summ.data).filter((s) => s.modes.includes('CLASSIC')).map((s) => s.image.full);
 await pool(sids, 8, (f) => dl(dd(`img/spell/${f}`), `public/img/spell/${f}`));
 console.log('summoner spells', sids.length);
+
+// ---------- champion ability + passive icons (HUD ability bar, tooltips) ----------
+// src/champions/icons.json: { ChampKey: [passive, Q, W, E, R] } file names under public/img/ability
+mkdirSync('public/img/ability', { recursive: true });
+const icons = {};
+for (const id of ids) {
+  const d = (await get(dd(`data/en_US/champion/${id}.json`))).data[id];
+  icons[id] = [d.passive.image.full, ...d.spells.map((s) => s.image.full)];
+}
+writeFileSync('src/champions/icons.json', JSON.stringify(icons));
+const aimgs = Object.entries(icons).flatMap(([, [p, ...s]]) => [['passive', p], ...s.map((f) => ['spell', f])]);
+await pool(aimgs, 8, ([kind, f]) => dl(dd(`img/${kind}/${f}`), `public/img/ability/${f}`));
+console.log('ability icons', aimgs.length);
